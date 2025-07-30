@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
 
+import authRoutes from "./api/v1/auth.routes";
+
 dotenv.config();
 
 const initializeConnections = async () => {
@@ -18,6 +20,8 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use("/api/v1/auth", authRoutes);
 
 app.get("/api/healthcheck", (_req: Request, res: Response) => {
     res.status(200).json({
