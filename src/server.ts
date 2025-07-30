@@ -1,8 +1,15 @@
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { connectDB } from "./config/db";
 
 dotenv.config();
+
+const initializeConnections = async () => {
+    await connectDB();
+};
+
+initializeConnections();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
