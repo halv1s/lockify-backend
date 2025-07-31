@@ -1,0 +1,66 @@
+// https://dbdiagram.io/
+
+Table Users {
+  id string [primary key]
+  email string [unique, not null]
+  srp_salt string [not null]
+  srp_verifier string [not null]
+  rsa_public_key string [not null]
+  default_workspace_id string [ref: > Workspaces.id, not null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table Workspaces {
+  id string [primary key]
+  owner_id string [ref: > Users.id, not null]
+  name string [not null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table WorkspaceMembers {
+  workspace_id string [ref: > Workspaces.id, not null]
+  user_id string [ref: > Users.id, not null]
+  role string [not null, note: '"admin", "member"']
+  created_at timestamp
+  
+  indexes {
+    (workspace_id, user_id) [unique]
+  }
+}
+
+Table Folders {
+  id string [primary key]
+  workspace_id string [ref: > Workspaces.id, not null]
+  owner_id string [ref: > Users.id, not null]
+  name string [not null]
+  is_shared boolean [not null, default: false]
+  encrypted_shared_folder_key string
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table FolderMembers {
+  folder_id string [ref: > Folders.id, not null]
+  user_id string [ref: > Users.id, not null]
+  permissions string [not null, note: '"edit", "read-only"']
+  encrypted_folder_key string [not null]
+  created_at timestamp
+  
+  indexes {
+    (folder_id, user_id) [unique]
+  }
+}
+
+Table Items {
+  id string [primary key]
+  folder_id string [ref: > Folders.id, not null]
+  owner_id string [ref: > Users.id, not null]
+  type string [not null, note: 'Enum: "Login", "Secure Note", "Credit Card", "API Key", "Custom"']
+  display_metadata json [note: 'Contains title, icon URL, etc. for quick UI rendering.']
+  encrypted_data string [not null]
+  encrypted_record_key string [not null]
+  created_at timestamp
+  updated_at timestamp
+}

@@ -5,7 +5,7 @@ export interface IUser extends Document {
     srpSalt: string;
     srpVerifier: string;
     rsaPublicKey: string;
-    hasPaid: boolean;
+    defaultWorkspaceId: mongoose.Types.ObjectId;
 }
 
 const userSchema: Schema = new Schema(
@@ -30,9 +30,10 @@ const userSchema: Schema = new Schema(
             type: String,
             required: true,
         },
-        hasPaid: {
-            type: Boolean,
-            default: false,
+        defaultWorkspaceId: {
+            type: Schema.Types.ObjectId,
+            ref: "Workspace",
+            required: true,
         },
     },
     {
