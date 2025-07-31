@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import jwt, { SignOptions } from "jsonwebtoken";
 import { randomBytes } from "crypto";
 import User, { IUser } from "../models/user.model";
 import { SRP, SrpServer } from "fast-srp-hap";
@@ -121,9 +121,11 @@ export const verifyLogin = async (input: IVerifyLoginInput) => {
         throw new Error("Invalid credentials. Login failed.");
     }
 
-    const sessionToken = jwt.sign({ userId: user._id }, config.jwt.secret, {
-        expiresIn: "1h",
-    });
+    const sessionToken = jwt.sign(
+        { userId: user._id, email: user.email },
+        config.jwt.secret,
+        { expiresIn: config.jwt.expiresIn as SignOptions["expiresIn"] }
+    );
 
     return {
         token: sessionToken,
