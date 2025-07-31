@@ -1,10 +1,10 @@
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
 
-let mongo: MongoMemoryServer;
+let mongo: MongoMemoryReplSet;
 
 beforeAll(async () => {
-    mongo = await MongoMemoryServer.create();
+    mongo = await MongoMemoryReplSet.create({ replSet: { count: 3 } });
     const mongoUri = mongo.getUri();
     await mongoose.connect(mongoUri);
 });
@@ -13,10 +13,7 @@ beforeEach(async () => {
     if (!mongoose.connection.db) {
         throw new Error("MongoDB connection not established");
     }
-    const collections = await mongoose.connection.db.collections();
-    for (const collection of collections) {
-        await collection.deleteMany({});
-    }
+    await mongoose.connection.db.dropDatabase();
 });
 
 afterAll(async () => {

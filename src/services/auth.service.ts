@@ -1,9 +1,12 @@
 import jwt, { SignOptions } from "jsonwebtoken";
 import { randomBytes } from "crypto";
 import User, { IUser } from "../models/user.model";
+import Workspace from "../models/workspace.model";
+import Folder from "../models/folder.model";
 import { SRP, SrpServer } from "fast-srp-hap";
 import { redisClient } from "../config/db";
 import config from "../config";
+import mongoose from "mongoose";
 
 interface IRegisterInput {
     email: string;
@@ -13,8 +16,13 @@ interface IRegisterInput {
 }
 
 export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
+    const session = await User.startSession();
+    session.startTransaction();
+
     try {
-        const existingUser = await User.findOne({ email: input.email });
+        const existingUser = await User.findOne({ email: input.email }).session(
+            session
+        );
         if (existingUser) {
             throw new Error("Email already exists");
         }
@@ -24,12 +32,35 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
             srpSalt: input.srpSalt,
             srpVerifier: input.srpVerifier,
             rsaPublicKey: input.rsaPublicKey,
+            // We set a temporary value for defaultWorkspaceId that will be updated.
+            defaultWorkspaceId: new mongoose.Types.ObjectId(),
         });
 
-        await newUser.save();
+        const personalWorkspace = new Workspace({
+            ownerId: newUser._id,
+            name: "Personal",
+        });
+
+        newUser.defaultWorkspaceId =
+            personalWorkspace._id as mongoose.Types.ObjectId;
+
+        const defaultFolder = new Folder({
+            workspaceId: personalWorkspace._id,
+            ownerId: newUser._id,
+            name: "Uncategorized",
+        });
+
+        await newUser.save({ session });
+        await personalWorkspace.save({ session });
+        await defaultFolder.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
 
         return newUser;
     } catch (error: any) {
+        await session.abortTransaction();
+        session.endSession();
         throw new Error(`Cannot register user: ${error.message}`);
     }
 };

@@ -1,6 +1,9 @@
 import request from "supertest";
 import app from "../../server";
 import { SRP, SrpClient } from "fast-srp-hap";
+import User from "../../models/user.model";
+import Workspace from "../../models/workspace.model";
+import Folder from "../../models/folder.model";
 
 jest.mock("../../config/db");
 
@@ -13,13 +16,28 @@ describe("Auth Routes /api/v1/auth", () => {
             rsaPublicKey: "somekey",
         };
 
-        it("should register a new user successfully and return status 201", async () => {
+        it("should register a new user and create a default workspace and folder", async () => {
             const res = await request(app)
                 .post("/api/v1/auth/register")
                 .send(testUser);
 
             expect(res.status).toBe(201);
             expect(res.body.user).toHaveProperty("email", testUser.email);
+
+            const user = await User.findOne({ email: testUser.email });
+            expect(user).not.toBeNull();
+
+            const workspace = await Workspace.findById(
+                user!.defaultWorkspaceId
+            );
+            expect(workspace).not.toBeNull();
+            expect(workspace!.name).toBe("Personal");
+
+            const folder = await Folder.findOne({
+                workspaceId: workspace!._id,
+            });
+            expect(folder).not.toBeNull();
+            expect(folder!.name).toBe("Uncategorized");
         });
 
         it("should fail with status 409 if email already exists", async () => {
