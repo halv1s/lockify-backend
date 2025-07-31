@@ -1,17 +1,11 @@
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { connectDB } from "./config/db";
+import { connectDB, connectRedis } from "./config/db";
 
 import authRoutes from "./api/v1/auth.routes";
 
 dotenv.config();
-
-const initializeConnections = async () => {
-    await connectDB();
-};
-
-initializeConnections();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -31,6 +25,17 @@ app.get("/api/healthcheck", (_req: Request, res: Response) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "test") {
+    const startServer = async () => {
+        await connectDB();
+        await connectRedis();
+
+        app.listen(PORT, () => {
+            console.log(`🚀 Server is running on http://localhost:${PORT}`);
+        });
+    };
+
+    startServer();
+}
+
+export default app;
