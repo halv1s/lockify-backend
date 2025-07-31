@@ -1,5 +1,6 @@
 import request from "supertest";
 import app from "../../server";
+import { SRP, SrpClient } from "fast-srp-hap";
 
 jest.mock("../../config/db");
 
@@ -48,6 +49,138 @@ describe("Auth Routes /api/v1/auth", () => {
         });
     });
 
-    // We can add tests for /login/initiate and /login/verify later.
-    // Those are more complex as they require simulating the client-side SRP calculations.
+    describe("Login Flow", () => {
+        const identity = "login-test@example.com";
+        const password = "a-very-secure-password";
+        let salt: Buffer;
+        let verifier: Buffer;
+
+        beforeEach(async () => {
+            salt = await SRP.genKey(32);
+            verifier = SRP.computeVerifier(
+                SRP.params[3072],
+                salt,
+                Buffer.from(identity),
+                Buffer.from(password)
+            );
+
+            await request(app)
+                .post("/api/v1/auth/register")
+                .send({
+                    email: identity,
+                    srpSalt: salt.toString("hex"),
+                    srpVerifier: verifier.toString("hex"),
+                    rsaPublicKey: "some-rsa-key",
+                });
+        });
+
+        it("should complete the two-step login successfully and return a JWT", async () => {
+            const initiateRes = await request(app)
+                .post("/api/v1/auth/login/initiate")
+                .send({ email: identity });
+
+            expect(initiateRes.status).toBe(200);
+            const { serverPublicEphemeral, challengeKey } = initiateRes.body;
+
+            const clientSecret = await SRP.genKey(32);
+            const client = new SrpClient(
+                SRP.params[3072],
+                salt,
+                Buffer.from(identity),
+                Buffer.from(password),
+                clientSecret
+            );
+
+            const clientPublicEphemeral = client.computeA();
+
+            client.setB(Buffer.from(serverPublicEphemeral, "hex"));
+
+            const clientProof = client.computeM1();
+
+            const verifyRes = await request(app)
+                .post("/api/v1/auth/login/verify")
+                .send({
+                    challengeKey,
+                    clientPublicEphemeral:
+                        clientPublicEphemeral.toString("hex"),
+                    clientProof: clientProof.toString("hex"),
+                });
+
+            expect(verifyRes.status).toBe(200);
+            expect(verifyRes.body).toHaveProperty("token");
+            expect(verifyRes.body.user).toHaveProperty("email", identity);
+        });
+
+        it("should fail with status 401 if the challengeKey is invalid", async () => {
+            const initiateRes = await request(app)
+                .post("/api/v1/auth/login/initiate")
+                .send({ email: identity });
+
+            expect(initiateRes.status).toBe(200);
+            const { serverPublicEphemeral } = initiateRes.body;
+
+            const clientSecret = await SRP.genKey(32);
+            const client = new SrpClient(
+                SRP.params[3072],
+                salt,
+                Buffer.from(identity),
+                Buffer.from(password),
+                clientSecret
+            );
+            const clientPublicEphemeral = client.computeA();
+            client.setB(Buffer.from(serverPublicEphemeral, "hex"));
+            const clientProof = client.computeM1();
+
+            const verifyRes = await request(app)
+                .post("/api/v1/auth/login/verify")
+                .send({
+                    challengeKey: "some-fake-or-expired-key",
+                    clientPublicEphemeral:
+                        clientPublicEphemeral.toString("hex"),
+                    clientProof: clientProof.toString("hex"),
+                });
+
+            expect(verifyRes.status).toBe(401);
+            expect(verifyRes.body).toHaveProperty(
+                "message",
+                "Invalid or expired login challenge. Please try again."
+            );
+        });
+
+        it("should fail with status 401 if the client proof (M1) is incorrect", async () => {
+            const initiateRes = await request(app)
+                .post("/api/v1/auth/login/initiate")
+                .send({ email: identity });
+
+            expect(initiateRes.status).toBe(200);
+            const { challengeKey } = initiateRes.body;
+
+            const clientSecret = await SRP.genKey(32);
+            const client = new SrpClient(
+                SRP.params[3072],
+                salt,
+                Buffer.from(identity),
+                Buffer.from(password),
+                clientSecret
+            );
+            const clientPublicEphemeral = client.computeA();
+
+            const wrongClientProof = await SRP.genKey(32);
+
+            const verifyRes = await request(app)
+                .post("/api/v1/auth/login/verify")
+                .send({
+                    challengeKey,
+                    clientPublicEphemeral:
+                        clientPublicEphemeral.toString("hex"),
+                    clientProof: wrongClientProof.toString("hex"),
+                });
+
+            expect(verifyRes.status).toBe(401);
+            expect(verifyRes.body).toHaveProperty(
+                "message",
+                "Invalid credentials. Login failed."
+            );
+        });
+    });
 });

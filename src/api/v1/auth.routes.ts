@@ -38,4 +38,41 @@ router.post("/register", async (req: Request, res: Response) => {
     }
 });
 
+router.post("/login/initiate", async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ message: "Email is required." });
+        }
+        const result = await authService.initiateLogin(email);
+        res.status(200).json(result);
+    } catch (error: any) {
+        res.status(404).json({ message: "Invalid credentials." });
+    }
+});
+
+router.post("/login/verify", async (req: Request, res: Response) => {
+    try {
+        const { challengeKey, clientPublicEphemeral, clientProof } = req.body;
+
+        if (!challengeKey || !clientPublicEphemeral || !clientProof) {
+            return res
+                .status(400)
+                .json({ message: "Please provide all information." });
+        }
+
+        const result = await authService.verifyLogin({
+            challengeKey,
+            clientPublicEphemeral,
+            clientProof,
+        });
+
+        res.status(200).json(result);
+    } catch (error: any) {
+        res.status(401).json({
+            message: error.message || "Invalid credentials.",
+        });
+    }
+});
+
 export default router;
