@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import Workspace from "@/models/workspace.model";
 import WorkspaceMember from "@/models/workspaceMember.model";
+import { WorkspaceRole } from "@/types";
 
 export const getWorkspacesForUser = async (userId: string) => {
     try {
@@ -20,5 +21,36 @@ export const getWorkspacesForUser = async (userId: string) => {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
         throw new Error(`Could not retrieve workspaces: ${errorMessage}`);
+    }
+};
+
+export const createWorkspace = async (ownerId: string, name: string) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const newWorkspace = new Workspace({
+            ownerId,
+            name,
+        });
+        await newWorkspace.save({ session });
+
+        const newMember = new WorkspaceMember({
+            workspaceId: newWorkspace._id,
+            userId: ownerId,
+            role: WorkspaceRole.ADMIN,
+        });
+        await newMember.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return newWorkspace;
+    } catch (error: unknown) {
+        await session.abortTransaction();
+        session.endSession();
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Could not create workspace: ${errorMessage}`);
     }
 };

@@ -33,7 +33,7 @@ describe("Workspace Routes /api/v1/workspaces", () => {
             expiresIn: "15m",
         });
 
-        testUser = { ...createdUser.toObject() };
+        testUser = createdUser;
     });
 
     describe("GET /", () => {
@@ -81,6 +81,47 @@ describe("Workspace Routes /api/v1/workspaces", () => {
             );
             expect(workspaceNames).toContain("Personal");
             expect(workspaceNames).toContain("Shared Team Workspace");
+        });
+    });
+
+    describe("POST /", () => {
+        it("should create a new workspace successfully and add the creator as an admin member", async () => {
+            const workspaceName = "My New Team";
+
+            const res = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ name: workspaceName });
+
+            expect(res.status).toBe(201);
+            expect(res.body.data).toHaveProperty("name", workspaceName);
+            expect(res.body.data).toHaveProperty(
+                "ownerId",
+                (testUser._id as mongoose.Types.ObjectId).toString()
+            );
+
+            const newWorkspaceId = res.body.data._id;
+
+            const member = await WorkspaceMember.findOne({
+                workspaceId: newWorkspaceId,
+                userId: testUser._id,
+            });
+
+            expect(member).not.toBeNull();
+            expect(member!.role).toBe(WorkspaceRole.ADMIN);
+        });
+
+        it("should fail with status 400 if the workspace name is missing", async () => {
+            const res = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body).toHaveProperty(
+                "message",
+                "Workspace name is required"
+            );
         });
     });
 });

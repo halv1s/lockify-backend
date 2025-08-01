@@ -5,18 +5,27 @@ import mongoose from "mongoose";
 let replset: MongoMemoryReplSet;
 
 beforeAll(async () => {
-    replset = await MongoMemoryReplSet.create({ replSet: { count: 3 } });
+    replset = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+
     const mongoUri = replset.getUri();
     await mongoose.connect(mongoUri);
-    // await while all SECONDARIES will be ready
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    if (mongoose.connection.db) {
+        await mongoose.connection.db.admin().ping();
+    }
 });
 
 beforeEach(async () => {
     if (!mongoose.connection.db) {
         throw new Error("MongoDB connection not established");
     }
-    await mongoose.connection.db.dropDatabase();
+
+    const collections = await mongoose.connection.db.collections();
+    for (const collection of collections) {
+        await collection.deleteMany({});
+    }
 });
 
 afterAll(async () => {
