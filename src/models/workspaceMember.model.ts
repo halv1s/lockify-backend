@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-import { WorkspaceRole } from "../types";
+import { WorkspaceRole } from "@/types";
 
 export interface IWorkspaceMember extends Document {
     workspaceId: mongoose.Types.ObjectId;

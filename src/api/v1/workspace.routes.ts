@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 
-import { protect } from "../../middlewares/auth.middleware";
-import * as workspaceService from "../../services/workspace.service"; // highlight-line
+import { protect } from "@/middlewares/auth.middleware";
+import * as workspaceService from "@/services/workspace.service"; // highlight-line
 
 const router = Router();
 

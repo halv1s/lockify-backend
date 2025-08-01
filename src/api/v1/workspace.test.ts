@@ -2,15 +2,15 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import request from "supertest";
 
-import config from "../../config";
-import User, { IUser } from "../../models/user.model";
-import Workspace, { IWorkspace } from "../../models/workspace.model";
-import WorkspaceMember from "../../models/workspaceMember.model";
-import app from "../../server";
-import * as authService from "../../services/auth.service";
-import { WorkspaceRole } from "../../types";
+import config from "@/config";
+import User, { IUser } from "@/models/user.model";
+import Workspace, { IWorkspace } from "@/models/workspace.model";
+import WorkspaceMember from "@/models/workspaceMember.model";
+import app from "@/server";
+import * as authService from "@/services/auth.service";
+import { WorkspaceRole } from "@/types";
 
-jest.mock("../../config/db");
+jest.mock("@/config/db");
 
 describe("Workspace Routes /api/v1/workspaces", () => {
     let testUser: IUser;

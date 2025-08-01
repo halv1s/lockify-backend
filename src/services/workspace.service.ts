@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-import Workspace from "../models/workspace.model";
-import WorkspaceMember from "../models/workspaceMember.model";
+import Workspace from "@/models/workspace.model";
+import WorkspaceMember from "@/models/workspaceMember.model";
 
 export const getWorkspacesForUser = async (userId: string) => {
     try {

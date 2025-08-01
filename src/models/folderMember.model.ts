@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-import { FolderPermissions } from "../types";
+import { FolderPermissions } from "@/types";
 
 export interface IFolderMember extends Document {
     folderId: mongoose.Types.ObjectId;

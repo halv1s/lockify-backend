@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-import { ItemType } from "../types";
+import { ItemType } from "@/types";
 
 export interface IItem extends Document {
     folderId: mongoose.Types.ObjectId;

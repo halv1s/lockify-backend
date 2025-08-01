@@ -1,12 +1,12 @@
 import { SRP, SrpClient } from "fast-srp-hap";
 import request from "supertest";
 
-import Folder from "../../models/folder.model";
-import User from "../../models/user.model";
-import Workspace from "../../models/workspace.model";
-import app from "../../server";
+import Folder from "@/models/folder.model";
+import User from "@/models/user.model";
+import Workspace from "@/models/workspace.model";
+import app from "@/server";
 
-jest.mock("../../config/db");
+jest.mock("@/config/db");
 
 describe("Auth Routes /api/v1/auth", () => {
     describe("POST /register", () => {

@@ -4,11 +4,11 @@ import { SRP, SrpServer } from "fast-srp-hap";
 import jwt, { SignOptions } from "jsonwebtoken";
 import mongoose from "mongoose";
 
-import config from "../config";
-import { redisClient } from "../config/db";
-import Folder from "../models/folder.model";
-import User, { IUser } from "../models/user.model";
-import Workspace from "../models/workspace.model";
+import config from "@/config";
+import { redisClient } from "@/config/db";
+import Folder from "@/models/folder.model";
+import User, { IUser } from "@/models/user.model";
+import Workspace from "@/models/workspace.model";
 
 interface IRegisterInput {
     email: string;

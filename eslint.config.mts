@@ -7,6 +7,15 @@ export default tseslint.config(
     tseslint.configs.recommended,
     {
         plugins: { import: importPlugin },
+        settings: {
+            "import/resolver": {
+                typescript: {
+                    alwaysTryTypes: true,
+                    project: "./tsconfig.json",
+                },
+                node: true,
+            },
+        },
         rules: {
             "import/order": [
                 "error",
