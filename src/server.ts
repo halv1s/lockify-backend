@@ -1,10 +1,10 @@
-import express, { Application, Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { connectDB, connectRedis } from "./config/db";
+import express, { Application, Request, Response } from "express";
 
 import authRoutes from "./api/v1/auth.routes";
 import workspaceRoutes from "./api/v1/workspace.routes";
+import { connectDB, connectRedis } from "./config/db";
 
 dotenv.config();
 

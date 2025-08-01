@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "tsx src/server.ts",
     "dev:watch": "tsx watch src/server.ts",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
   },
   "keywords": [],
   "author": "",
@@ -22,17 +24,23 @@
     "redis": "^5.6.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.1.0",
     "@types/supertest": "^6.0.3",
+    "eslint": "^9.32.0",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^16.3.0",
     "jest": "^30.0.5",
+    "jiti": "^2.5.1",
     "mongodb-memory-server": "^10.1.4",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.0",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
   }
 }

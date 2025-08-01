@@ -1,9 +1,10 @@
-import request from "supertest";
-import app from "../../server";
 import { SRP, SrpClient } from "fast-srp-hap";
+import request from "supertest";
+
+import Folder from "../../models/folder.model";
 import User from "../../models/user.model";
 import Workspace from "../../models/workspace.model";
-import Folder from "../../models/folder.model";
+import app from "../../server";
 
 jest.mock("../../config/db");
 

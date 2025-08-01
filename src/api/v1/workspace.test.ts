@@ -1,18 +1,19 @@
-import request from "supertest";
-import app from "../../server";
+import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import User from "../../models/user.model";
-import Workspace from "../../models/workspace.model";
+import request from "supertest";
+
+import config from "../../config";
+import User, { IUser } from "../../models/user.model";
+import Workspace, { IWorkspace } from "../../models/workspace.model";
 import WorkspaceMember from "../../models/workspaceMember.model";
+import app from "../../server";
 import * as authService from "../../services/auth.service";
 import { WorkspaceRole } from "../../types";
-import jwt from "jsonwebtoken";
-import config from "../../config";
 
 jest.mock("../../config/db");
 
 describe("Workspace Routes /api/v1/workspaces", () => {
-    let testUser: any;
+    let testUser: IUser;
     let userToken: string;
 
     beforeEach(async () => {
@@ -75,7 +76,9 @@ describe("Workspace Routes /api/v1/workspaces", () => {
             expect(res.body.data).toBeInstanceOf(Array);
             expect(res.body.data.length).toBe(2);
 
-            const workspaceNames = res.body.data.map((ws: any) => ws.name);
+            const workspaceNames = res.body.data.map(
+                (ws: IWorkspace) => ws.name
+            );
             expect(workspaceNames).toContain("Personal");
             expect(workspaceNames).toContain("Shared Team Workspace");
         });

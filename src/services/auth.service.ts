@@ -1,12 +1,14 @@
-import jwt, { SignOptions } from "jsonwebtoken";
 import { randomBytes } from "crypto";
+
+import { SRP, SrpServer } from "fast-srp-hap";
+import jwt, { SignOptions } from "jsonwebtoken";
+import mongoose from "mongoose";
+
+import config from "../config";
+import { redisClient } from "../config/db";
+import Folder from "../models/folder.model";
 import User, { IUser } from "../models/user.model";
 import Workspace from "../models/workspace.model";
-import Folder from "../models/folder.model";
-import { SRP, SrpServer } from "fast-srp-hap";
-import { redisClient } from "../config/db";
-import config from "../config";
-import mongoose from "mongoose";
 
 interface IRegisterInput {
     email: string;
@@ -58,10 +60,12 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
         session.endSession();
 
         return newUser;
-    } catch (error: any) {
+    } catch (error: unknown) {
         await session.abortTransaction();
         session.endSession();
-        throw new Error(`Cannot register user: ${error.message}`);
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Cannot register user: ${errorMessage}`);
     }
 };
 
@@ -148,7 +152,7 @@ export const verifyLogin = async (input: IVerifyLoginInput) => {
     try {
         server.setA(clientPublicEphemeralBuf);
         server.checkM1(clientProofBuf);
-    } catch (error) {
+    } catch {
         throw new Error("Invalid credentials. Login failed.");
     }
 

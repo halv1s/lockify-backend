@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { createClient } from "redis";
+
 import config from "./index";
 
 export const connectDB = async () => {

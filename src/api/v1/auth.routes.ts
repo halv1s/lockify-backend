@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+
 import * as authService from "../../services/auth.service";
 
 const router = Router();
@@ -27,13 +28,16 @@ router.post("/register", async (req: Request, res: Response) => {
                 email: newUser.email,
             },
         });
-    } catch (error: any) {
-        if (error.message.includes("Email already exists")) {
+    } catch (error: unknown) {
+        if (
+            error instanceof Error &&
+            error.message.includes("Email already exists")
+        ) {
             return res.status(409).json({ message: error.message });
         }
         res.status(500).json({
             message: "Internal server error.",
-            error: error.message,
+            error: error instanceof Error ? error.message : "Unknown error",
         });
     }
 });
@@ -46,7 +50,7 @@ router.post("/login/initiate", async (req: Request, res: Response) => {
         }
         const result = await authService.initiateLogin(email);
         res.status(200).json(result);
-    } catch (error: any) {
+    } catch {
         res.status(404).json({ message: "Invalid credentials." });
     }
 });
@@ -68,9 +72,10 @@ router.post("/login/verify", async (req: Request, res: Response) => {
         });
 
         res.status(200).json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(401).json({
-            message: error.message || "Invalid credentials.",
+            message:
+                error instanceof Error ? error.message : "Invalid credentials.",
         });
     }
 });

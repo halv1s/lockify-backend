@@ -1,6 +1,7 @@
+import mongoose from "mongoose";
+
 import Workspace from "../models/workspace.model";
 import WorkspaceMember from "../models/workspaceMember.model";
-import mongoose from "mongoose";
 
 export const getWorkspacesForUser = async (userId: string) => {
     try {
@@ -15,7 +16,9 @@ export const getWorkspacesForUser = async (userId: string) => {
         });
 
         return workspaces;
-    } catch (error: any) {
-        throw new Error(`Could not retrieve workspaces: ${error.message}`);
+    } catch (error: unknown) {
+        const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+        throw new Error(`Could not retrieve workspaces: ${errorMessage}`);
     }
 };
