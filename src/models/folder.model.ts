@@ -4,6 +4,7 @@ export interface IFolder extends Document {
     workspaceId: mongoose.Types.ObjectId;
     ownerId: mongoose.Types.ObjectId;
     name: string;
+    parentId?: mongoose.Types.ObjectId;
     isShared: boolean;
     encryptedSharedFolderKey?: string;
 }
@@ -24,6 +25,11 @@ const folderSchema: Schema = new Schema(
             type: String,
             required: true,
             trim: true,
+        },
+        parentId: {
+            type: Schema.Types.ObjectId,
+            ref: "Folder",
+            required: false,
         },
         isShared: {
             type: Boolean,
