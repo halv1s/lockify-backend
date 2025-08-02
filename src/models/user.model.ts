@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IUser extends Document {
     email: string;
+    masterSalt: string;
     srpSalt: string;
     srpVerifier: string;
     rsaPublicKey: string;
@@ -17,6 +18,10 @@ const userSchema: Schema = new Schema(
             trim: true,
             lowercase: true,
             match: [/\S+@\S+\.\S+/, "Email is not valid"],
+        },
+        masterSalt: {
+            type: String,
+            required: true,
         },
         srpSalt: {
             type: String,

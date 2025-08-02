@@ -7,15 +7,9 @@ import Folder, { IFolder } from "@/models/folder.model";
 import Item, { IItem } from "@/models/item.model";
 import Share from "@/models/share.model";
 import { IUser } from "@/models/user.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
 import app from "@/server";
 import * as authService from "@/services/auth.service";
-import {
-    FolderPermissions,
-    ItemType,
-    ShareTargetType,
-    WorkspaceRole,
-} from "@/types";
+import { FolderPermissions, ItemType, ShareTargetType } from "@/types";
 
 jest.mock("@/config/db");
 
@@ -34,15 +28,11 @@ describe("Item Routes /api/v1/items", () => {
     const createUserAndToken = async (email: string) => {
         const user = await authService.registerUser({
             email,
+            masterSalt: "mastersalt",
             srpSalt: "s",
             srpVerifier: "v",
             rsaPublicKey: "k",
         });
-        await new WorkspaceMember({
-            workspaceId: user.defaultWorkspaceId,
-            userId: user._id,
-            role: WorkspaceRole.ADMIN,
-        }).save();
         const token = jwt.sign(
             { userId: user._id, email: user.email },
             config.jwt.secret

@@ -5,11 +5,12 @@ const config: Config = {
     testEnvironment: "node",
     setupFilesAfterEnv: ["<rootDir>/src/test/setup.ts"],
     clearMocks: true,
-    coverageDirectory: "coverage",
+    coverageDirectory: "coverage/e2e",
     moduleNameMapper: {
         "^@/(.*)$": "<rootDir>/src/$1",
     },
-    testMatch: ["<rootDir>/src/**/!(*.e2e).test.ts"],
+    testMatch: ["<rootDir>/src/**/*.e2e.test.ts"],
+    testTimeout: 30000,
 };
 
 export default config;

@@ -12,6 +12,7 @@ describe("Auth Routes /api/v1/auth", () => {
     describe("POST /register", () => {
         const testUser = {
             email: "test@example.com",
+            masterSalt: "somemastersalt",
             srpSalt: "somesalt",
             srpVerifier: "someverifier",
             rsaPublicKey: "somekey",
@@ -27,6 +28,10 @@ describe("Auth Routes /api/v1/auth", () => {
 
             const user = await User.findOne({ email: testUser.email });
             expect(user).not.toBeNull();
+            expect(user!.masterSalt).toBe(testUser.masterSalt);
+            expect(user!.srpSalt).toBe(testUser.srpSalt);
+            expect(user!.srpVerifier).toBe(testUser.srpVerifier);
+            expect(user!.rsaPublicKey).toBe(testUser.rsaPublicKey);
 
             const workspace = await Workspace.findById(
                 user!.defaultWorkspaceId
@@ -87,6 +92,7 @@ describe("Auth Routes /api/v1/auth", () => {
                 .post("/api/v1/auth/register")
                 .send({
                     email: identity,
+                    masterSalt: "somemastersalt",
                     srpSalt: salt.toString("hex"),
                     srpVerifier: verifier.toString("hex"),
                     rsaPublicKey: "some-rsa-key",

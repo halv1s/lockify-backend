@@ -19,6 +19,7 @@ describe("Workspace Routes /api/v1/workspaces", () => {
     beforeEach(async () => {
         const userInput = {
             email: "workspace-user@example.com",
+            masterSalt: "mastersalt",
             srpSalt: "somesalt",
             srpVerifier: "someverifier",
             rsaPublicKey: "somekey",
@@ -45,6 +46,7 @@ describe("Workspace Routes /api/v1/workspaces", () => {
         it("should return the user's personal workspace and any shared workspaces", async () => {
             const otherUser = await new User({
                 email: "other-user@example.com",
+                masterSalt: "mastersalt2",
                 srpSalt: "salt2",
                 srpVerifier: "verifier2",
                 rsaPublicKey: "key2",
@@ -54,12 +56,6 @@ describe("Workspace Routes /api/v1/workspaces", () => {
             const sharedWorkspace = await new Workspace({
                 ownerId: otherUser._id,
                 name: "Shared Team Workspace",
-            }).save();
-
-            await new WorkspaceMember({
-                workspaceId: testUser.defaultWorkspaceId,
-                userId: testUser._id,
-                role: WorkspaceRole.ADMIN,
             }).save();
 
             await new WorkspaceMember({

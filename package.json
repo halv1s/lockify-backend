@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx src/server.ts",
     "dev:watch": "tsx watch src/server.ts",
-    "test": "jest",
+    "test": "jest  --config ./jest.config.ts",
+    "test:e2e": "jest --config ./jest.e2e.config.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
   },

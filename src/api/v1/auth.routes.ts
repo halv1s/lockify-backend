@@ -5,9 +5,9 @@ import * as authService from "@/services/auth.service";
 const router = Router();
 
 router.post("/register", async (req: Request, res: Response) => {
-    const { email, srpSalt, srpVerifier, rsaPublicKey } = req.body;
+    const { email, masterSalt, srpSalt, srpVerifier, rsaPublicKey } = req.body;
 
-    if (!email || !srpSalt || !srpVerifier || !rsaPublicKey) {
+    if (!email || !masterSalt || !srpSalt || !srpVerifier || !rsaPublicKey) {
         return res
             .status(400)
             .json({ message: "Please provide all information." });
@@ -16,6 +16,7 @@ router.post("/register", async (req: Request, res: Response) => {
     try {
         const newUser = await authService.registerUser({
             email,
+            masterSalt,
             srpSalt,
             srpVerifier,
             rsaPublicKey,

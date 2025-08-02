@@ -23,6 +23,7 @@ describe("Share Routes /api/v1/shares", () => {
     const createUserAndToken = async (email: string) => {
         const user = await authService.registerUser({
             email,
+            masterSalt: "mastersalt",
             srpSalt: "salt",
             srpVerifier: "verifier",
             rsaPublicKey: "key",

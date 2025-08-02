@@ -3,6 +3,7 @@
 Table Users {
   id string [primary key]
   email string [unique, not null]
+  master_salt string [not null]
   srp_salt string [not null]
   srp_verifier string [not null]
   rsa_public_key string [not null]

@@ -25,6 +25,7 @@ describe("Folder Routes /api/v1/folders", () => {
     const createUserAndToken = async (email: string) => {
         const user = await authService.registerUser({
             email,
+            masterSalt: "mastersalt",
             srpSalt: "salt",
             srpVerifier: "verifier",
             rsaPublicKey: "key",
@@ -50,11 +51,6 @@ describe("Folder Routes /api/v1/folders", () => {
         personalWorkspaceId = adminUser.defaultWorkspaceId.toString();
 
         await WorkspaceMember.insertMany([
-            {
-                workspaceId: personalWorkspaceId,
-                userId: adminUser._id,
-                role: WorkspaceRole.ADMIN,
-            },
             {
                 workspaceId: personalWorkspaceId,
                 userId: managerUser._id,

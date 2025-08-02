@@ -9,9 +9,12 @@ import { redisClient } from "@/config/db";
 import Folder from "@/models/folder.model";
 import User, { IUser } from "@/models/user.model";
 import Workspace from "@/models/workspace.model";
+import WorkspaceMember from "@/models/workspaceMember.model";
+import { WorkspaceRole } from "@/types";
 
 interface IRegisterInput {
     email: string;
+    masterSalt: string;
     srpSalt: string;
     srpVerifier: string;
     rsaPublicKey: string;
@@ -31,6 +34,7 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
 
         const newUser = new User({
             email: input.email,
+            masterSalt: input.masterSalt,
             srpSalt: input.srpSalt,
             srpVerifier: input.srpVerifier,
             rsaPublicKey: input.rsaPublicKey,
@@ -46,6 +50,12 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
         newUser.defaultWorkspaceId =
             personalWorkspace._id as mongoose.Types.ObjectId;
 
+        const defaultWorkspaceMember = new WorkspaceMember({
+            workspaceId: personalWorkspace._id,
+            userId: newUser._id,
+            role: WorkspaceRole.ADMIN,
+        });
+
         const defaultFolder = new Folder({
             workspaceId: personalWorkspace._id,
             ownerId: newUser._id,
@@ -54,6 +64,7 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
 
         await newUser.save({ session });
         await personalWorkspace.save({ session });
+        await defaultWorkspaceMember.save({ session });
         await defaultFolder.save({ session });
 
         await session.commitTransaction();
