@@ -39,10 +39,20 @@ router.post("/", protect, async (req: Request, res: Response) => {
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
+
         if (errorMessage.includes("Forbidden")) {
             return res.status(403).json({ message: errorMessage });
         }
-        res.status(404).json({ message: errorMessage });
+        if (errorMessage.includes("not found")) {
+            return res.status(404).json({ message: errorMessage });
+        }
+        if (
+            errorMessage.includes("You cannot share a resource with yourself")
+        ) {
+            return res.status(400).json({ message: errorMessage });
+        }
+
+        res.status(500).json({ message: "Server error", error: errorMessage });
     }
 });
 

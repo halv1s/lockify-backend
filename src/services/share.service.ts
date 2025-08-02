@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import Folder from "@/models/folder.model";
+import Item from "@/models/item.model";
 import Share from "@/models/share.model";
 import User from "@/models/user.model";
 import { FolderPermissions, ShareTargetType } from "@/types";
@@ -37,9 +38,14 @@ export const shareResource = async (input: IShareResourceInput) => {
         if (!folder || folder.ownerId.toString() !== initiatorId) {
             throw new Error("Forbidden: You can only share folders you own.");
         }
+    } else if (targetType === ShareTargetType.ITEM) {
+        const item = await Item.findById(targetId);
+        if (!item || item.ownerId.toString() !== initiatorId) {
+            throw new Error("Forbidden: You can only share items you own.");
+        }
+    } else {
+        throw new Error("Invalid target type for sharing.");
     }
-
-    // TODO: Add logic for sharing items here later.
 
     const newShare = await Share.findOneAndUpdate(
         {
