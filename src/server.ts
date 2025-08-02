@@ -4,6 +4,8 @@ import express, { Application, Request, Response } from "express";
 
 import authRoutes from "./api/v1/auth.routes";
 import folderRoutes from "./api/v1/folder.routes";
+import itemRoutes from "./api/v1/item.routes";
+import shareRoutes from "./api/v1/share.routes";
 import workspaceRoutes from "./api/v1/workspace.routes";
 import { connectDB, connectRedis } from "./config/db";
 
@@ -19,6 +21,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/folders", folderRoutes);
+app.use("/api/v1/items", itemRoutes);
+app.use("/api/v1/shares", shareRoutes);
 app.use("/api/v1/workspaces", workspaceRoutes);
 
 app.get("/api/healthcheck", (_req: Request, res: Response) => {

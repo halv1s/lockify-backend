@@ -1,3 +1,8 @@
+export enum ShareTargetType {
+    FOLDER = "folder",
+    ITEM = "item",
+}
+
 export enum ItemType {
     LOGIN = "Login",
     SECURE_NOTE = "Secure Note",

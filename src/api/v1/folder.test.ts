@@ -107,7 +107,7 @@ describe("Folder Routes /api/v1/folders", () => {
             expect(res.status).toBe(403);
             expect(res.body).toHaveProperty(
                 "message",
-                "Could not create folder: Forbidden: Only workspace admins or managers can create new folders."
+                "Forbidden: Only workspace admins or managers can create new folders."
             );
         });
 

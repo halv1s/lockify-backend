@@ -5,8 +5,6 @@ export interface IFolder extends Document {
     ownerId: mongoose.Types.ObjectId;
     name: string;
     parentId?: mongoose.Types.ObjectId;
-    isShared: boolean;
-    encryptedSharedFolderKey?: string;
 }
 
 const folderSchema: Schema = new Schema(
@@ -30,14 +28,6 @@ const folderSchema: Schema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "Folder",
             required: false,
-        },
-        isShared: {
-            type: Boolean,
-            default: false,
-        },
-        encryptedSharedFolderKey: {
-            type: String,
-            required: false, // Only exists if isShared is true
         },
     },
     {
