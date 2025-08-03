@@ -30,37 +30,26 @@ const permissionHierarchy: Record<ReBACRelation, ReBACRelation[]> = {
     [ReBACRelation.PARENT]: [],
 };
 
-/**
- * Check if a subject has a permission on an object.
- * This function works by traversing the ReBAC graph.
- *
- * @param subject - Subject requesting permission (e.g., 'users:userId').
- * @param requiredPermission - Permission to check (e.g., ReBACRelation.EDITOR).
- * @param object - Object the permission is applied on (e.g., 'items:itemId').
- * @param visited - (Internal for recursion) Set to avoid infinite loop in the graph.
- * @returns {Promise<boolean>} - True if has permission, otherwise false.
- */
 export const checkPermission = async (
     subject: string,
     requiredPermission: ReBACRelation,
     object: string,
     visited = new Set<string>()
 ): Promise<boolean> => {
-    // Key to prevent infinite recursion
-    const visitKey = `${subject}-${requiredPermission}-${object}`;
+    // Anti-cycle mechanism
+    const visitKey = `${subject}-${object}`;
     if (visited.has(visitKey)) {
         return false;
     }
     visited.add(visitKey);
 
-    // 1. Find all direct relations of the subject.
-    const directRelations = await Relation.find({ subject });
+    // Find all relations where the current 'subject' is granted some permission.
+    const subjectRelations = await Relation.find({ subject });
 
-    for (const rel of directRelations) {
-        // 2. Check direct permission
-        // Example: does the user have 'editor' relation on this object?
+    for (const rel of subjectRelations) {
+        // --- Path 1: Direct Permission Check ---
+        // Does this relation apply directly to the object we are checking?
         if (rel.object === object) {
-            // Check if the current relation includes the required permission
             if (
                 rel.relation === requiredPermission ||
                 permissionHierarchy[rel.relation]?.includes(requiredPermission)
@@ -69,37 +58,35 @@ export const checkPermission = async (
             }
         }
 
-        // 3. Check permission inherited from parent
-        // Example: does the user have 'editor' relation on the parent of this object?
-        const parentRelation = await Relation.findOne({
-            subject: object,
-            relation: ReBACRelation.PARENT,
-        });
-        if (parentRelation) {
-            if (
-                await checkPermission(
-                    subject,
-                    requiredPermission,
-                    parentRelation.object,
-                    visited
-                )
-            ) {
-                return true;
-            }
-        }
-
-        // 4. Check permission by group (User-set rewrites)
-        // Example: user is 'manager' of workspace, and the group 'manager' of this workspace has 'editor' permission on object.
-        // `rel.object` here is a group, e.g., 'workspaces:wsId'
-        // `rel.relation` is the role of user in the group, e.g., 'manager'
-        // new subject will be group-role, e.g., 'workspaces:wsId#manager'
-        const groupSubject = `${rel.object}#${rel.relation}`;
+        // --- Path 2: Group Permission Check (User-Set Rewrites) ---
+        // Does this relation make the user a member of a group? (e.g. subject=user, object=workspace)
+        // If so, does that GROUP have the required permission on the target object?
+        const groupSubject = `${rel.object}#${rel.relation}`; // e.g., "workspaces:ws123#manager"
         if (
             await checkPermission(
                 groupSubject,
                 requiredPermission,
                 object,
-                visited
+                new Set(visited)
+            )
+        ) {
+            return true;
+        }
+    }
+
+    // --- Path 3: Parent Inheritance Check ---
+    // If no direct or group permissions were found, find the parent of the current object.
+    const parentRelation = await Relation.findOne({
+        subject: object,
+        relation: ReBACRelation.PARENT,
+    });
+    if (parentRelation) {
+        if (
+            await checkPermission(
+                subject,
+                requiredPermission,
+                parentRelation.object,
+                new Set(visited)
             )
         ) {
             return true;

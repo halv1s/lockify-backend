@@ -53,12 +53,7 @@ describe("Folder Routes /api/v1/folders", () => {
 
         const workspaceObject = `${ReBACNamespace.WORKSPACES}:${personalWorkspaceId}`;
         await Relation.insertMany([
-            // Admin user is already an admin from registration, but we can be explicit
-            {
-                subject: `${ReBACNamespace.USERS}:${adminUser._id}`,
-                relation: ReBACRelation.ADMIN,
-                object: workspaceObject,
-            },
+            // The `adminUser` is already an admin of `personalWorkspaceId` via registerUser.
             // Add managerUser as a MANAGER
             {
                 subject: `${ReBACNamespace.USERS}:${managerUser._id}`,

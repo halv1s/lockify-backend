@@ -16,7 +16,6 @@ Table Users {
 
 Table Workspaces {
   id string [primary key]
-  owner_id string [ref: > Users.id, not null]
   name string [not null]
   created_at timestamp
   updated_at timestamp
@@ -26,7 +25,6 @@ Table Folders {
   id string [primary key]
   workspace_id string [ref: > Workspaces.id, not null]
   name string [not null]
-  parent_id string [ref: > Folders.id, note: 'For nested folders']
   created_at timestamp
   updated_at timestamp
 }
@@ -51,6 +49,7 @@ Table Relations {
   object string [not null, note: "The object of the relation. Format: 'workspaces:<workspace_id>', 'folders:<folder_id>', 'items:<item_id>'"]
   encrypted_key string [note: "Stores the encrypted item/folder key for explicit shares (e.g., for 'editor' or 'viewer' relations)"]
   created_at timestamp
+  updated_at timestamp
   
   indexes {
     (subject, relation, object) [unique]

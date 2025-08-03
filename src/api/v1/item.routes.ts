@@ -84,7 +84,7 @@ router.post("/", protect, async (req: Request, res: Response) => {
 
     try {
         const newItem = await itemService.createItem({
-            ownerId: req.user.userId,
+            creatorId: req.user.userId,
             folderId,
             type: type as ItemType,
             displayMetadata,
