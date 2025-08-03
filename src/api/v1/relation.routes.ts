@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 
 import { protect } from "@/middlewares/auth.middleware";
-import * as shareService from "@/services/share.service";
-import { FolderPermissions, ShareTargetType } from "@/types";
+import * as relationService from "@/services/relation.service";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
 const router = Router();
 
@@ -26,16 +26,28 @@ router.post("/", protect, async (req: Request, res: Response) => {
             .json({ message: "Missing required fields for sharing." });
     }
 
+    const permissionToGrant = permissions as ReBACRelation;
+    const targetNamespace = targetType as ReBACNamespace;
+
+    if (
+        permissionToGrant !== ReBACRelation.EDITOR &&
+        permissionToGrant !== ReBACRelation.VIEWER
+    ) {
+        return res
+            .status(400)
+            .json({ message: "Invalid permission type for sharing." });
+    }
+
     try {
-        const newShare = await shareService.shareResource({
+        const newRelation = await relationService.shareResource({
             initiatorId: req.user.userId,
             recipientEmail,
             targetId,
-            targetType: targetType as ShareTargetType,
-            permissions: permissions as FolderPermissions,
+            targetNamespace,
+            permissionToGrant,
             encryptedKey,
         });
-        res.status(201).json({ data: newShare });
+        res.status(201).json({ data: newRelation });
     } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : "Unknown error";

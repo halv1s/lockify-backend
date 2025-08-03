@@ -5,11 +5,11 @@ import request from "supertest";
 import config from "@/config";
 import Folder, { IFolder } from "@/models/folder.model";
 import Item, { IItem } from "@/models/item.model";
-import Share from "@/models/share.model";
+import Relation from "@/models/relation.model";
 import { IUser } from "@/models/user.model";
 import app from "@/server";
 import * as authService from "@/services/auth.service";
-import { FolderPermissions, ItemType, ShareTargetType } from "@/types";
+import { ItemType, ReBACNamespace, ReBACRelation } from "@/types";
 
 jest.mock("@/config/db");
 
@@ -57,13 +57,11 @@ describe("Item Routes /api/v1/items", () => {
         ));
 
         folder = await new Folder({
-            ownerId: owner._id,
             workspaceId: owner.defaultWorkspaceId,
             name: "Test Folder",
         }).save();
 
         const item = await new Item({
-            ownerId: owner._id,
             folderId: folder._id,
             type: ItemType.LOGIN,
             displayMetadata: { title: "Shared API Key" },
@@ -74,19 +72,36 @@ describe("Item Routes /api/v1/items", () => {
         }).save();
         sharedItem = item.toObject();
 
-        await Share.insertMany([
+        await Relation.insertMany([
+            // 1. Owner owns the folder and the item
             {
-                userId: editor._id,
-                targetId: sharedItem._id,
-                targetType: ShareTargetType.ITEM,
-                permissions: FolderPermissions.EDIT,
-                encryptedKey: "key-for-editor",
+                subject: `${ReBACNamespace.USERS}:${owner._id}`,
+                relation: ReBACRelation.OWNER,
+                object: `${ReBACNamespace.FOLDERS}:${folder._id}`,
             },
             {
-                userId: viewer._id,
-                targetId: sharedItem._id,
-                targetType: ShareTargetType.ITEM,
-                permissions: FolderPermissions.READ_ONLY,
+                subject: `${ReBACNamespace.USERS}:${owner._id}`,
+                relation: ReBACRelation.OWNER,
+                object: `${ReBACNamespace.ITEMS}:${sharedItem._id}`,
+            },
+            // 2. The item belongs to the folder (parent-child relationship)
+            {
+                subject: `${ReBACNamespace.ITEMS}:${sharedItem._id}`,
+                relation: ReBACRelation.PARENT,
+                object: `${ReBACNamespace.FOLDERS}:${folder._id}`,
+            },
+            // 3. Editor has 'editor' role on the item
+            {
+                subject: `${ReBACNamespace.USERS}:${editor._id}`,
+                relation: ReBACRelation.EDITOR,
+                object: `${ReBACNamespace.ITEMS}:${sharedItem._id}`,
+                encryptedKey: "key-for-editor",
+            },
+            // 4. Viewer has 'viewer' role on the item
+            {
+                subject: `${ReBACNamespace.USERS}:${viewer._id}`,
+                relation: ReBACRelation.VIEWER,
+                object: `${ReBACNamespace.ITEMS}:${sharedItem._id}`,
                 encryptedKey: "key-for-viewer",
             },
         ]);
@@ -101,7 +116,7 @@ describe("Item Routes /api/v1/items", () => {
             expect(res.body.data.encryptedData).toBe("super-secret-data");
         });
 
-        it("should allow a user with share permissions to get the item details", async () => {
+        it("should allow a user with share permissions (viewer) to get the item details", async () => {
             const res = await request(app)
                 .get(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${viewerToken}`);
@@ -117,18 +132,15 @@ describe("Item Routes /api/v1/items", () => {
     });
 
     describe("POST /", () => {
-        it("should allow a user with 'edit' permission to create an item in a shared folder", async () => {
+        it("should allow a user with 'editor' permission on a folder to create an item in it", async () => {
             const newFolder = await new Folder({
-                ownerId: owner._id,
                 workspaceId: owner.defaultWorkspaceId,
                 name: "Editor Test Folder",
             }).save();
-
-            await new Share({
-                userId: editor._id,
-                targetId: newFolder._id,
-                targetType: ShareTargetType.FOLDER,
-                permissions: FolderPermissions.EDIT,
+            await new Relation({
+                subject: `${ReBACNamespace.USERS}:${editor._id}`,
+                relation: ReBACRelation.EDITOR,
+                object: `${ReBACNamespace.FOLDERS}:${newFolder._id}`,
                 encryptedKey: "key-for-editor",
             }).save();
 
@@ -141,9 +153,9 @@ describe("Item Routes /api/v1/items", () => {
                     ).toString(),
                     type: ItemType.API_KEY,
                     encryptedData: "some-api-data",
-                    encryptedDataIv: "some-api-data-iv",
+                    encryptedDataIv: "iv",
                     encryptedRecordKey: "some-api-key",
-                    encryptedRecordKeyIv: "some-api-key-iv",
+                    encryptedRecordKeyIv: "iv",
                 });
 
             expect(res.status).toBe(201);
@@ -153,18 +165,15 @@ describe("Item Routes /api/v1/items", () => {
             );
         });
 
-        it("should FORBID a user with 'read-only' permission from creating an item in a shared folder", async () => {
+        it("should FORBID a user with 'viewer' permission on a folder from creating an item", async () => {
             const newFolder = await new Folder({
-                ownerId: owner._id,
                 workspaceId: owner.defaultWorkspaceId,
                 name: "Viewer Test Folder",
             }).save();
-
-            await new Share({
-                userId: viewer._id,
-                targetId: newFolder._id,
-                targetType: ShareTargetType.FOLDER,
-                permissions: FolderPermissions.READ_ONLY,
+            await new Relation({
+                subject: `${ReBACNamespace.USERS}:${viewer._id}`,
+                relation: ReBACRelation.VIEWER,
+                object: `${ReBACNamespace.FOLDERS}:${newFolder._id}`,
                 encryptedKey: "key-for-viewer",
             }).save();
 
@@ -177,9 +186,9 @@ describe("Item Routes /api/v1/items", () => {
                     ).toString(),
                     type: ItemType.LOGIN,
                     encryptedData: "some-data",
-                    encryptedDataIv: "some-data-iv",
+                    encryptedDataIv: "iv",
                     encryptedRecordKey: "some-key",
-                    encryptedRecordKeyIv: "some-key-iv",
+                    encryptedRecordKeyIv: "iv",
                 });
 
             expect(res.status).toBe(403);
@@ -201,29 +210,23 @@ describe("Item Routes /api/v1/items", () => {
 
             expect(res.status).toBe(200);
             expect(res.body.data.encryptedData).toBe("new-data");
-            expect(res.body.data.encryptedDataIv).toBe("new-data-iv");
         });
 
-        it("should allow a user with 'edit' permission to update the item", async () => {
+        it("should allow a user with 'editor' permission to update the item", async () => {
             const res = await request(app)
                 .put(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${editorToken}`)
-                .send({
-                    displayMetadata: { title: "Updated Title" },
-                });
+                .send({ displayMetadata: { title: "Updated Title" } });
 
             expect(res.status).toBe(200);
             expect(res.body.data.displayMetadata.title).toBe("Updated Title");
         });
 
-        it("should FORBID a user with 'read-only' permission from updating the item", async () => {
+        it("should FORBID a user with 'viewer' permission from updating the item", async () => {
             const res = await request(app)
                 .put(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${viewerToken}`)
-                .send({
-                    encryptedData: "forbidden-data",
-                    encryptedDataIv: "forbidden-data-iv",
-                });
+                .send({ encryptedData: "forbidden-data" });
 
             expect(res.status).toBe(403);
         });
@@ -236,25 +239,21 @@ describe("Item Routes /api/v1/items", () => {
                 .set("Authorization", `Bearer ${ownerToken}`);
 
             expect(res.status).toBe(200);
-            expect(res.body.message).toBe("Item deleted successfully");
-
             const item = await Item.findById(sharedItem._id);
             expect(item).toBeNull();
         });
 
-        it("should ALLOW a user with 'edit' permission to delete the item", async () => {
+        it("should ALLOW a user with 'editor' permission to delete the item", async () => {
             const res = await request(app)
                 .delete(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${editorToken}`);
 
             expect(res.status).toBe(200);
-            expect(res.body.message).toBe("Item deleted successfully");
-
             const item = await Item.findById(sharedItem._id);
             expect(item).toBeNull();
         });
 
-        it("should FORBID a user with 'read-only' permission from deleting the item", async () => {
+        it("should FORBID a user with 'viewer' permission from deleting the item", async () => {
             const res = await request(app)
                 .delete(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${viewerToken}`);

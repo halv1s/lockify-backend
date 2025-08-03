@@ -1,31 +1,27 @@
 import mongoose from "mongoose";
 
-import Folder from "@/models/folder.model";
 import Item, { IItem } from "@/models/item.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
-import * as permissionService from "@/services/permission.service";
-import { FolderPermissions, ItemType, ShareTargetType } from "@/types";
+import Relation from "@/models/relation.model";
+import { hasPermission } from "@/services/permission.service";
+import { ItemType, ReBACNamespace, ReBACRelation } from "@/types";
 
 export const getItemsInFolder = async (userId: string, folderId: string) => {
-    const folder = await Folder.findById(folderId);
-    if (!folder) {
-        throw new Error("Folder not found.");
-    }
+    const canViewFolder = await hasPermission(
+        userId,
+        ReBACRelation.VIEWER,
+        ReBACNamespace.FOLDERS,
+        folderId
+    );
 
-    const membership = await WorkspaceMember.findOne({
-        workspaceId: folder.workspaceId,
-        userId: new mongoose.Types.ObjectId(userId),
-    });
-
-    if (!membership) {
+    if (!canViewFolder) {
         throw new Error(
-            "Forbidden: You do not have access to this folder's workspace."
+            "Forbidden: You do not have permission to view items in this folder."
         );
     }
 
-    // Fetch only the necessary metadata for the list view (lazy loading).
-    // We explicitly exclude the sensitive encrypted fields.
-    const items = await Item.find({ folderId }).select(
+    const items = await Item.find({
+        folderId: new mongoose.Types.ObjectId(folderId),
+    }).select(
         "-encryptedData -encryptedDataIv -encryptedRecordKey -encryptedRecordKeyIv"
     );
 
@@ -36,13 +32,14 @@ export const getItemById = async (
     userId: string,
     itemId: string
 ): Promise<IItem> => {
-    const hasReadAccess = await permissionService.hasPermission(
+    const canReadItem = await hasPermission(
         userId,
-        itemId,
-        ShareTargetType.ITEM,
-        FolderPermissions.READ_ONLY
+        ReBACRelation.VIEWER,
+        ReBACNamespace.ITEMS,
+        itemId
     );
-    if (!hasReadAccess) {
+
+    if (!canReadItem) {
         throw new Error(
             "Forbidden: You do not have permission to access this item."
         );
@@ -53,7 +50,7 @@ export const getItemById = async (
 };
 
 interface ICreateItemInput {
-    ownerId: string;
+    creatorId: string;
     folderId: string;
     type: ItemType;
     displayMetadata?: object;
@@ -64,43 +61,58 @@ interface ICreateItemInput {
 }
 
 export const createItem = async (input: ICreateItemInput): Promise<IItem> => {
-    const {
-        ownerId,
-        folderId,
-        type,
-        displayMetadata,
-        encryptedData,
-        encryptedDataIv,
-        encryptedRecordKey,
-        encryptedRecordKeyIv,
-    } = input;
+    const { creatorId, folderId, ...itemData } = input;
 
-    const hasEditPermission = await permissionService.hasPermission(
-        ownerId,
-        folderId,
-        ShareTargetType.FOLDER,
-        FolderPermissions.EDIT
+    const canCreateInFolder = await hasPermission(
+        creatorId,
+        ReBACRelation.EDITOR,
+        ReBACNamespace.FOLDERS,
+        folderId
     );
 
-    if (!hasEditPermission) {
+    if (!canCreateInFolder) {
         throw new Error(
             "Forbidden: You do not have permission to create items in this folder."
         );
     }
 
-    const newItem = new Item({
-        ownerId,
-        folderId,
-        type,
-        displayMetadata,
-        encryptedData,
-        encryptedDataIv,
-        encryptedRecordKey,
-        encryptedRecordKeyIv,
-    });
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    await newItem.save();
-    return newItem;
+    try {
+        const newItem = new Item({
+            folderId,
+            ...itemData,
+        });
+        await newItem.save({ session });
+
+        const userSubject = `${ReBACNamespace.USERS}:${creatorId}`;
+        const itemObject = `${ReBACNamespace.ITEMS}:${newItem._id}`;
+        const folderObject = `${ReBACNamespace.FOLDERS}:${folderId}`;
+
+        const relationsToCreate = [
+            {
+                subject: userSubject,
+                relation: ReBACRelation.OWNER,
+                object: itemObject,
+            },
+            {
+                subject: itemObject,
+                relation: ReBACRelation.PARENT,
+                object: folderObject,
+            },
+        ];
+
+        await Relation.insertMany(relationsToCreate, { session });
+
+        await session.commitTransaction();
+        session.endSession();
+        return newItem;
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+    }
 };
 
 interface IUpdateItemInput {
@@ -114,13 +126,13 @@ export const updateItem = async (
     itemId: string,
     updateData: IUpdateItemInput
 ): Promise<IItem> => {
-    const hasEditAccess = await permissionService.hasPermission(
+    const canEditItem = await hasPermission(
         userId,
-        itemId,
-        ShareTargetType.ITEM,
-        FolderPermissions.EDIT
+        ReBACRelation.EDITOR,
+        ReBACNamespace.ITEMS,
+        itemId
     );
-    if (!hasEditAccess) {
+    if (!canEditItem) {
         throw new Error(
             "Forbidden: You do not have permission to edit this item."
         );
@@ -136,22 +148,38 @@ export const deleteItem = async (
     userId: string,
     itemId: string
 ): Promise<{ message: string }> => {
-    const item = await Item.findById(itemId);
-    if (!item) throw new Error("Item not found.");
-
-    const hasEditAccess = await permissionService.hasPermission(
+    const canDeleteItem = await hasPermission(
         userId,
-        itemId,
-        ShareTargetType.ITEM,
-        FolderPermissions.EDIT
+        ReBACRelation.EDITOR,
+        ReBACNamespace.ITEMS,
+        itemId
     );
 
-    if (!hasEditAccess) {
+    if (!canDeleteItem) {
         throw new Error(
             "Forbidden: You do not have permission to delete this item."
         );
     }
 
-    await Item.deleteOne({ _id: itemId });
-    return { message: "Item deleted successfully" };
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        const deletedItem = await Item.findByIdAndDelete(itemId, { session });
+        if (!deletedItem) throw new Error("Item not found.");
+
+        // Clean up all relations associated with the deleted item.
+        const itemObject = `${ReBACNamespace.ITEMS}:${itemId}`;
+        await Relation.deleteMany(
+            { $or: [{ subject: itemObject }, { object: itemObject }] },
+            { session }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+        return { message: "Item deleted successfully" };
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+    }
 };

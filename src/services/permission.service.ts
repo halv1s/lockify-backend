@@ -109,7 +109,6 @@ export const checkPermission = async (
     return false;
 };
 
-// A helper function to use easily from other services
 export const hasPermission = async (
     userId: string,
     requiredPermission: ReBACRelation,

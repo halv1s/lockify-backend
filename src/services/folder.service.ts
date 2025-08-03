@@ -1,16 +1,19 @@
 import mongoose from "mongoose";
 
 import Folder from "@/models/folder.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
-import { WorkspaceRole } from "@/types";
+import Relation from "@/models/relation.model";
+import { hasPermission } from "@/services/permission.service";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
 export const getFolders = async (userId: string, workspaceId: string) => {
-    const membership = await WorkspaceMember.findOne({
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
-        userId: new mongoose.Types.ObjectId(userId),
-    });
+    const canAccessWorkspace = await hasPermission(
+        userId,
+        ReBACRelation.MEMBER,
+        ReBACNamespace.WORKSPACES,
+        workspaceId
+    );
 
-    if (!membership) {
+    if (!canAccessWorkspace) {
         throw new Error("Forbidden: User is not a member of this workspace.");
     }
 
@@ -22,48 +25,74 @@ export const getFolders = async (userId: string, workspaceId: string) => {
 };
 
 export const createFolder = async (
-    ownerId: string,
+    creatorId: string,
     workspaceId: string,
     name: string,
     parentId?: string
 ) => {
-    const membership = await WorkspaceMember.findOne({
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
-        userId: new mongoose.Types.ObjectId(ownerId),
-    });
+    const canCreateFolder = await hasPermission(
+        creatorId,
+        ReBACRelation.MANAGER,
+        ReBACNamespace.WORKSPACES,
+        workspaceId
+    );
 
-    if (!membership) {
-        throw new Error("Forbidden: User is not a member of this workspace.");
-    }
-
-    if (
-        membership.role !== WorkspaceRole.ADMIN &&
-        membership.role !== WorkspaceRole.MANAGER
-    ) {
+    if (!canCreateFolder) {
         throw new Error(
             "Forbidden: Only workspace admins or managers can create new folders."
         );
     }
 
-    if (parentId) {
-        const parentFolder = await Folder.findOne({
-            _id: parentId,
-            workspaceId: workspaceId,
-        });
-        if (!parentFolder) {
-            throw new Error(
-                "Parent folder not found or does not belong to the specified workspace."
-            );
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        if (parentId) {
+            const parentFolder = await Folder.findOne({
+                _id: parentId,
+                workspaceId: workspaceId,
+            }).session(session);
+            if (!parentFolder) {
+                throw new Error(
+                    "Parent folder not found or does not belong to the specified workspace."
+                );
+            }
         }
+
+        const newFolder = new Folder({
+            workspaceId,
+            name,
+        });
+        await newFolder.save({ session });
+
+        const userSubject = `${ReBACNamespace.USERS}:${creatorId}`;
+        const folderObject = `${ReBACNamespace.FOLDERS}:${newFolder._id}`;
+
+        const relationsToCreate = [
+            {
+                subject: userSubject,
+                relation: ReBACRelation.OWNER,
+                object: folderObject,
+            },
+        ];
+
+        if (parentId) {
+            relationsToCreate.push({
+                subject: folderObject,
+                relation: ReBACRelation.PARENT,
+                object: `${ReBACNamespace.FOLDERS}:${parentId}`,
+            });
+        }
+
+        await Relation.insertMany(relationsToCreate, { session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return newFolder;
+    } catch (error: unknown) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
     }
-
-    const newFolder = new Folder({
-        ownerId,
-        workspaceId,
-        name,
-        parentId,
-    });
-
-    await newFolder.save();
-    return newFolder;
 };

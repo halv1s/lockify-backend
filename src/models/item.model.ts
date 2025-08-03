@@ -4,7 +4,6 @@ import { ItemType } from "@/types";
 
 export interface IItem extends Document {
     folderId: mongoose.Types.ObjectId;
-    ownerId: mongoose.Types.ObjectId;
     type: ItemType;
     displayMetadata?: object;
     encryptedData: string;
@@ -18,11 +17,6 @@ const itemSchema: Schema = new Schema(
         folderId: {
             type: Schema.Types.ObjectId,
             ref: "Folder",
-            required: true,
-        },
-        ownerId: {
-            type: Schema.Types.ObjectId,
-            ref: "User",
             required: true,
         },
         type: {

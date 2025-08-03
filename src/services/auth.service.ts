@@ -7,10 +7,10 @@ import mongoose from "mongoose";
 import config from "@/config";
 import { redisClient } from "@/config/db";
 import Folder from "@/models/folder.model";
+import Relation from "@/models/relation.model";
 import User, { IUser } from "@/models/user.model";
 import Workspace from "@/models/workspace.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
-import { WorkspaceRole } from "@/types";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
 interface IRegisterInput {
     email: string;
@@ -35,41 +35,57 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
         }
 
         const newUser = new User({
-            email: input.email,
-            masterSalt: input.masterSalt,
-            srpSalt: input.srpSalt,
-            srpVerifier: input.srpVerifier,
-            rsaPublicKey: input.rsaPublicKey,
-            encryptedRsaPrivateKey: input.encryptedRsaPrivateKey,
-            encryptedRsaPrivateKeyIv: input.encryptedRsaPrivateKeyIv,
+            ...input,
             // We set a temporary value for defaultWorkspaceId that will be updated.
             defaultWorkspaceId: new mongoose.Types.ObjectId(),
         });
 
-        const personalWorkspace = new Workspace({
-            ownerId: newUser._id,
-            name: "Personal",
-        });
-
+        const personalWorkspace = new Workspace({ name: "Personal" });
         newUser.defaultWorkspaceId =
             personalWorkspace._id as mongoose.Types.ObjectId;
 
-        const defaultWorkspaceMember = new WorkspaceMember({
-            workspaceId: personalWorkspace._id,
-            userId: newUser._id,
-            role: WorkspaceRole.ADMIN,
-        });
-
         const defaultFolder = new Folder({
             workspaceId: personalWorkspace._id,
-            ownerId: newUser._id,
             name: "Uncategorized",
         });
 
+        // Save the main documents first
         await newUser.save({ session });
         await personalWorkspace.save({ session });
-        await defaultWorkspaceMember.save({ session });
         await defaultFolder.save({ session });
+
+        // Create all initial relations for the new user
+        const userSubject = `${ReBACNamespace.USERS}:${newUser._id}`;
+        const workspaceObject = `${ReBACNamespace.WORKSPACES}:${personalWorkspace._id}`;
+        const folderObject = `${ReBACNamespace.FOLDERS}:${defaultFolder._id}`;
+
+        const initialRelations = [
+            // User owns and is an admin of their personal workspace
+            {
+                subject: userSubject,
+                relation: ReBACRelation.OWNER,
+                object: workspaceObject,
+            },
+            {
+                subject: userSubject,
+                relation: ReBACRelation.ADMIN,
+                object: workspaceObject,
+            },
+            // User owns the default "Uncategorized" folder
+            {
+                subject: userSubject,
+                relation: ReBACRelation.OWNER,
+                object: folderObject,
+            },
+            // The "Uncategorized" folder belongs to the personal workspace (parent relation)
+            {
+                subject: folderObject,
+                relation: ReBACRelation.PARENT,
+                object: workspaceObject,
+            },
+        ];
+
+        await Relation.insertMany(initialRelations, { session });
 
         await session.commitTransaction();
         session.endSession();

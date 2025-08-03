@@ -2,9 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IFolder extends Document {
     workspaceId: mongoose.Types.ObjectId;
-    ownerId: mongoose.Types.ObjectId;
     name: string;
-    parentId?: mongoose.Types.ObjectId;
 }
 
 const folderSchema: Schema = new Schema(
@@ -14,20 +12,10 @@ const folderSchema: Schema = new Schema(
             ref: "Workspace",
             required: true,
         },
-        ownerId: {
-            type: Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
-        },
         name: {
             type: String,
             required: true,
             trim: true,
-        },
-        parentId: {
-            type: Schema.Types.ObjectId,
-            ref: "Folder",
-            required: false,
         },
     },
     {
