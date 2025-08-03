@@ -1,78 +1,123 @@
-import mongoose from "mongoose";
+import Relation from "@/models/relation.model";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
-import Folder from "@/models/folder.model";
-import Item from "@/models/item.model";
-import Share from "@/models/share.model";
-import { FolderPermissions, ShareTargetType } from "@/types";
+const formatIdentifier = (namespace: ReBACNamespace, id: string): string => {
+    return `${namespace}:${id}`;
+};
 
-export const hasPermission = async (
-    userId: string,
-    targetId: string,
-    targetType: ShareTargetType,
-    requiredPermission: FolderPermissions
+const permissionHierarchy: Record<ReBACRelation, ReBACRelation[]> = {
+    [ReBACRelation.OWNER]: [
+        ReBACRelation.ADMIN,
+        ReBACRelation.MANAGER,
+        ReBACRelation.MEMBER,
+        ReBACRelation.EDITOR,
+        ReBACRelation.VIEWER,
+    ],
+    [ReBACRelation.ADMIN]: [
+        ReBACRelation.MANAGER,
+        ReBACRelation.MEMBER,
+        ReBACRelation.EDITOR,
+        ReBACRelation.VIEWER,
+    ],
+    [ReBACRelation.MANAGER]: [
+        ReBACRelation.MEMBER,
+        ReBACRelation.EDITOR,
+        ReBACRelation.VIEWER,
+    ],
+    [ReBACRelation.EDITOR]: [ReBACRelation.VIEWER],
+    [ReBACRelation.VIEWER]: [],
+    [ReBACRelation.MEMBER]: [],
+    [ReBACRelation.PARENT]: [],
+};
+
+/**
+ * Check if a subject has a permission on an object.
+ * This function works by traversing the ReBAC graph.
+ *
+ * @param subject - Subject requesting permission (e.g., 'users:userId').
+ * @param requiredPermission - Permission to check (e.g., ReBACRelation.EDITOR).
+ * @param object - Object the permission is applied on (e.g., 'items:itemId').
+ * @param visited - (Internal for recursion) Set to avoid infinite loop in the graph.
+ * @returns {Promise<boolean>} - True if has permission, otherwise false.
+ */
+export const checkPermission = async (
+    subject: string,
+    requiredPermission: ReBACRelation,
+    object: string,
+    visited = new Set<string>()
 ): Promise<boolean> => {
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    let currentTargetId = new mongoose.Types.ObjectId(targetId);
-    let isOwner = false;
-
-    // First, determine if the user is the owner
-    if (targetType === ShareTargetType.ITEM) {
-        const item = await Item.findById(currentTargetId);
-        if (!item) return false;
-        if (item.ownerId.equals(userObjectId)) isOwner = true;
-    } else {
-        const folder = await Folder.findById(currentTargetId);
-        if (!folder) return false;
-        if (folder.ownerId.equals(userObjectId)) isOwner = true;
+    // Key to prevent infinite recursion
+    const visitKey = `${subject}-${requiredPermission}-${object}`;
+    if (visited.has(visitKey)) {
+        return false;
     }
+    visited.add(visitKey);
 
-    // The owner always has full permissions.
-    if (isOwner) return true;
+    // 1. Find all direct relations of the subject.
+    const directRelations = await Relation.find({ subject });
 
-    let highestPermission: FolderPermissions | null = null;
-
-    // If the target is an item, check its direct share first
-    if (targetType === ShareTargetType.ITEM) {
-        const directItemShare = await Share.findOne({
-            userId: userObjectId,
-            targetId: currentTargetId,
-            targetType: ShareTargetType.ITEM,
-        });
-        if (directItemShare) {
-            highestPermission = directItemShare.permissions;
-        }
-        // Then, start traversal from its parent folder
-        const item = await Item.findById(currentTargetId);
-        currentTargetId = item!.folderId;
-    }
-
-    // Iteratively check the current folder and its parents
-    while (currentTargetId && highestPermission !== FolderPermissions.EDIT) {
-        const folderShare = await Share.findOne({
-            userId: userObjectId,
-            targetId: currentTargetId,
-            targetType: ShareTargetType.FOLDER,
-        });
-
-        if (folderShare) {
-            // 'edit' is higher than 'read-only'
-            if (folderShare.permissions === FolderPermissions.EDIT) {
-                highestPermission = FolderPermissions.EDIT;
-            } else if (!highestPermission) {
-                highestPermission = FolderPermissions.READ_ONLY;
+    for (const rel of directRelations) {
+        // 2. Check direct permission
+        // Example: does the user have 'editor' relation on this object?
+        if (rel.object === object) {
+            // Check if the current relation includes the required permission
+            if (
+                rel.relation === requiredPermission ||
+                permissionHierarchy[rel.relation]?.includes(requiredPermission)
+            ) {
+                return true;
             }
         }
 
-        const folder = await Folder.findById(currentTargetId);
-        currentTargetId = folder?.parentId as mongoose.Types.ObjectId;
+        // 3. Check permission inherited from parent
+        // Example: does the user have 'editor' relation on the parent of this object?
+        const parentRelation = await Relation.findOne({
+            subject: object,
+            relation: ReBACRelation.PARENT,
+        });
+        if (parentRelation) {
+            if (
+                await checkPermission(
+                    subject,
+                    requiredPermission,
+                    parentRelation.object,
+                    visited
+                )
+            ) {
+                return true;
+            }
+        }
+
+        // 4. Check permission by group (User-set rewrites)
+        // Example: user is 'manager' of workspace, and the group 'manager' of this workspace has 'editor' permission on object.
+        // `rel.object` here is a group, e.g., 'workspaces:wsId'
+        // `rel.relation` is the role of user in the group, e.g., 'manager'
+        // new subject will be group-role, e.g., 'workspaces:wsId#manager'
+        const groupSubject = `${rel.object}#${rel.relation}`;
+        if (
+            await checkPermission(
+                groupSubject,
+                requiredPermission,
+                object,
+                visited
+            )
+        ) {
+            return true;
+        }
     }
 
-    // Finally, check if the highest permission found meets the requirement
-    if (!highestPermission) return false;
-    if (requiredPermission === FolderPermissions.EDIT) {
-        return highestPermission === FolderPermissions.EDIT;
-    }
+    return false;
+};
 
-    // If 'read-only' is required, both 'read-only' and 'edit' are sufficient.
-    return true;
+// A helper function to use easily from other services
+export const hasPermission = async (
+    userId: string,
+    requiredPermission: ReBACRelation,
+    objectNamespace: ReBACNamespace,
+    objectId: string
+): Promise<boolean> => {
+    const subject = formatIdentifier(ReBACNamespace.USERS, userId);
+    const object = formatIdentifier(objectNamespace, objectId);
+
+    return checkPermission(subject, requiredPermission, object);
 };

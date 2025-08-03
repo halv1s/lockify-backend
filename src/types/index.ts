@@ -1,6 +1,23 @@
-export enum ShareTargetType {
-    FOLDER = "folder",
-    ITEM = "item",
+export enum ReBACNamespace {
+    USERS = "users",
+    WORKSPACES = "workspaces",
+    FOLDERS = "folders",
+    ITEMS = "items",
+}
+
+export enum ReBACRelation {
+    // Owner & Role
+    OWNER = "owner",
+    ADMIN = "admin",
+    MANAGER = "manager",
+    MEMBER = "member",
+
+    // Parent
+    PARENT = "parent",
+
+    // Share
+    EDITOR = "editor",
+    VIEWER = "viewer",
 }
 
 export enum ItemType {
@@ -9,17 +26,6 @@ export enum ItemType {
     CREDIT_CARD = "Credit Card",
     API_KEY = "API Key",
     CUSTOM = "Custom",
-}
-
-export enum FolderPermissions {
-    EDIT = "edit",
-    READ_ONLY = "read-only",
-}
-
-export enum WorkspaceRole {
-    ADMIN = "admin",
-    MANAGER = "manager",
-    MEMBER = "member",
 }
 
 export enum CustomFieldType {
