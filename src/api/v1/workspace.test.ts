@@ -1,14 +1,13 @@
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
 import request from "supertest";
 
 import config from "@/config";
-import User, { IUser } from "@/models/user.model";
+import Relation from "@/models/relation.model";
+import { IUser } from "@/models/user.model";
 import Workspace, { IWorkspace } from "@/models/workspace.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
 import app from "@/server";
 import * as authService from "@/services/auth.service";
-import { WorkspaceRole } from "@/types";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
 jest.mock("@/config/db");
 
@@ -35,7 +34,6 @@ describe("Workspace Routes /api/v1/workspaces", () => {
         userToken = jwt.sign(tokenPayload, config.jwt.secret, {
             expiresIn: "15m",
         });
-
         testUser = createdUser;
     });
 
@@ -46,27 +44,34 @@ describe("Workspace Routes /api/v1/workspaces", () => {
         });
 
         it("should return the user's personal workspace and any shared workspaces", async () => {
-            const otherUser = await new User({
+            const otherUser = await authService.registerUser({
                 email: "other-user@example.com",
-                masterSalt: "mastersalt2",
-                srpSalt: "salt2",
-                srpVerifier: "verifier2",
-                rsaPublicKey: "key2",
-                encryptedRsaPrivateKey: "encryptedkey2",
-                encryptedRsaPrivateKeyIv: "encryptedkeyiv2",
-                defaultWorkspaceId: new mongoose.Types.ObjectId(),
-            }).save();
+                masterSalt: "ms2",
+                srpSalt: "s2",
+                srpVerifier: "v2",
+                rsaPublicKey: "k2",
+                encryptedRsaPrivateKey: "ek2",
+                encryptedRsaPrivateKeyIv: "eki2",
+            });
 
             const sharedWorkspace = await new Workspace({
-                ownerId: otherUser._id,
                 name: "Shared Team Workspace",
             }).save();
 
-            await new WorkspaceMember({
-                workspaceId: sharedWorkspace._id,
-                userId: testUser._id,
-                role: WorkspaceRole.MEMBER,
-            }).save();
+            await Relation.insertMany([
+                // Other user owns the shared workspace
+                {
+                    subject: `${ReBACNamespace.USERS}:${otherUser._id}`,
+                    relation: ReBACRelation.OWNER,
+                    object: `${ReBACNamespace.WORKSPACES}:${sharedWorkspace._id}`,
+                },
+                // testUser is a member of the shared workspace
+                {
+                    subject: `${ReBACNamespace.USERS}:${testUser._id}`,
+                    relation: ReBACRelation.MEMBER,
+                    object: `${ReBACNamespace.WORKSPACES}:${sharedWorkspace._id}`,
+                },
+            ]);
 
             const res = await request(app)
                 .get("/api/v1/workspaces")
@@ -95,20 +100,23 @@ describe("Workspace Routes /api/v1/workspaces", () => {
 
             expect(res.status).toBe(201);
             expect(res.body.data).toHaveProperty("name", workspaceName);
-            expect(res.body.data).toHaveProperty(
-                "ownerId",
-                (testUser._id as mongoose.Types.ObjectId).toString()
-            );
 
             const newWorkspaceId = res.body.data._id;
+            const newWorkspaceObject = `${ReBACNamespace.WORKSPACES}:${newWorkspaceId}`;
 
-            const member = await WorkspaceMember.findOne({
-                workspaceId: newWorkspaceId,
-                userId: testUser._id,
+            const ownerRelation = await Relation.findOne({
+                subject: `${ReBACNamespace.USERS}:${testUser._id}`,
+                relation: ReBACRelation.OWNER,
+                object: newWorkspaceObject,
+            });
+            const adminRelation = await Relation.findOne({
+                subject: `${ReBACNamespace.USERS}:${testUser._id}`,
+                relation: ReBACRelation.ADMIN,
+                object: newWorkspaceObject,
             });
 
-            expect(member).not.toBeNull();
-            expect(member!.role).toBe(WorkspaceRole.ADMIN);
+            expect(ownerRelation).not.toBeNull();
+            expect(adminRelation).not.toBeNull();
         });
 
         it("should fail with status 400 if the workspace name is missing", async () => {

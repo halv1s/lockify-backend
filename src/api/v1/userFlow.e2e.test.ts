@@ -4,10 +4,10 @@ import { hashRaw } from "@node-rs/argon2";
 import { SRP, SrpClient } from "fast-srp-hap";
 import request from "supertest";
 
-import Share from "@/models/share.model";
+import Relation from "@/models/relation.model";
 import User from "@/models/user.model";
 import app from "@/server";
-import { FolderPermissions, ItemType, ShareTargetType } from "@/types";
+import { ReBACNamespace, ReBACRelation, ItemType } from "@/types";
 
 jest.mock("@/config/db");
 
@@ -36,10 +36,10 @@ const simulateSrpClientLogin = async (
 };
 
 // Helper to derive Master Key from password and salt using argon2id
-async function deriveMasterKey(
+const deriveMasterKey = async (
     password: string,
     salt: Buffer
-): Promise<CryptoKey> {
+): Promise<CryptoKey> => {
     const keyBytes = await hashRaw(password, {
         salt,
         memoryCost: 19456, // 19 MiB
@@ -55,10 +55,10 @@ async function deriveMasterKey(
         false, // not extractable
         ["encrypt", "decrypt"]
     );
-}
+};
 
 // Helper to encrypt an AES key using another AES key (for Master Key -> Item Key)
-async function aesKeyEncrypt(itemKey: CryptoKey, masterKey: CryptoKey) {
+const aesKeyEncrypt = async (itemKey: CryptoKey, masterKey: CryptoKey) => {
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
     const exportedItemKey = await webcrypto.subtle.exportKey("raw", itemKey);
     const encryptedItemKey = await webcrypto.subtle.encrypt(
@@ -73,14 +73,14 @@ async function aesKeyEncrypt(itemKey: CryptoKey, masterKey: CryptoKey) {
         ciphertext: Buffer.from(encryptedItemKey).toString("base64"),
         iv: Buffer.from(iv).toString("base64"),
     };
-}
+};
 
 // Helper to decrypt an AES key using another AES key
-async function aesKeyDecrypt(
+const aesKeyDecrypt = async (
     encryptedBase64: string,
     masterKey: CryptoKey,
     ivBase64: string
-) {
+) => {
     const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
     const iv = Buffer.from(ivBase64, "base64");
     const decryptedItemKeyRaw = await webcrypto.subtle.decrypt(
@@ -98,10 +98,10 @@ async function aesKeyDecrypt(
         true,
         ["encrypt", "decrypt"]
     );
-}
+};
 
 // Helper to generate AES key (raw bytes)
-async function generateAesKey() {
+const generateAesKey = async () => {
     const aesKey = await webcrypto.subtle.generateKey(
         {
             name: "AES-GCM",
@@ -111,10 +111,10 @@ async function generateAesKey() {
         ["encrypt", "decrypt"]
     );
     return aesKey;
-}
+};
 
 // Helper to encrypt data using AES-GCM
-async function aesEncrypt(data: string, key: CryptoKey) {
+const aesEncrypt = async (data: string, key: CryptoKey) => {
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
     const encryptedContent = await webcrypto.subtle.encrypt(
         {
@@ -128,14 +128,14 @@ async function aesEncrypt(data: string, key: CryptoKey) {
         ciphertext: Buffer.from(encryptedContent).toString("base64"),
         iv: Buffer.from(iv).toString("base64"),
     };
-}
+};
 
 // Helper to decrypt data using AES-GCM
-async function aesDecrypt(
+const aesDecrypt = async (
     encryptedBase64: string,
     key: CryptoKey,
     ivBase64: string
-) {
+) => {
     const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
     const iv = Buffer.from(ivBase64, "base64");
     const decryptedContent = await webcrypto.subtle.decrypt(
@@ -147,10 +147,10 @@ async function aesDecrypt(
         encryptedArrayBuffer
     );
     return new TextDecoder().decode(decryptedContent);
-}
+};
 
 // Helper to generate RSA key pair (JWK format)
-async function generateRsaKeyPair() {
+const generateRsaKeyPair = async () => {
     const { publicKey, privateKey } = await webcrypto.subtle.generateKey(
         {
             name: "RSA-OAEP",
@@ -170,10 +170,10 @@ async function generateRsaKeyPair() {
         privateKey
     );
     return { publicKey: exportedPublicKey, privateKey: exportedPrivateKey };
-}
+};
 
 // Helper to encrypt AES key using RSA-OAEP public key
-async function rsaEncrypt(aesKey: CryptoKey, rsaPublicKey: JsonWebKey) {
+const rsaEncrypt = async (aesKey: CryptoKey, rsaPublicKey: JsonWebKey) => {
     const exportedAesKey = await webcrypto.subtle.exportKey("raw", aesKey);
     const importedRsaPublicKey = await webcrypto.subtle.importKey(
         "jwk",
@@ -190,10 +190,13 @@ async function rsaEncrypt(aesKey: CryptoKey, rsaPublicKey: JsonWebKey) {
         exportedAesKey
     );
     return Buffer.from(encryptedKey).toString("base64");
-}
+};
 
 // Helper to decrypt AES key using RSA-OAEP private key
-async function rsaDecrypt(encryptedBase64: string, rsaPrivateKey: JsonWebKey) {
+const rsaDecrypt = async (
+    encryptedBase64: string,
+    rsaPrivateKey: JsonWebKey
+) => {
     const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
     const importedRsaPrivateKey = await webcrypto.subtle.importKey(
         "jwk",
@@ -216,7 +219,7 @@ async function rsaDecrypt(encryptedBase64: string, rsaPrivateKey: JsonWebKey) {
         true,
         ["encrypt", "decrypt"]
     );
-}
+};
 
 describe("End-to-End User Flow Tests", () => {
     let testUserEmail: string;
@@ -534,13 +537,13 @@ describe("End-to-End Sharing Flow with RSA", () => {
         );
 
         const shareRes = await request(app)
-            .post("/api/v1/shares")
+            .post("/api/v1/relations")
             .set("Authorization", `Bearer ${initiatorToken}`)
             .send({
                 recipientEmail: recipientEmail,
                 targetId: sharedItemId,
-                targetType: ShareTargetType.ITEM,
-                permissions: FolderPermissions.READ_ONLY,
+                targetType: ReBACNamespace.ITEMS,
+                permissions: ReBACRelation.VIEWER,
                 encryptedKey: encryptedKeyForRecipient,
             });
         expect(shareRes.status).toBe(201);
@@ -574,13 +577,12 @@ describe("End-to-End Sharing Flow with RSA", () => {
         expect(retrievedItem).toHaveProperty("encryptedData");
 
         // --- Step 9: Recipient (User B) Decrypts the Item Data (client-side decryption simulation) ---
-        const shareRecord = await Share.findOne({
-            userId: recipientUser!._id,
-            targetId: sharedItemId,
-            targetType: ShareTargetType.ITEM,
+        const relationRecord = await Relation.findOne({
+            subject: `${ReBACNamespace.USERS}:${recipientUser!._id}`,
+            object: `${ReBACNamespace.ITEMS}:${sharedItemId}`,
         });
-        expect(shareRecord).not.toBeNull();
-        const recipientEncryptedKey = shareRecord!.encryptedKey;
+        expect(relationRecord).not.toBeNull();
+        const recipientEncryptedKey = relationRecord!.encryptedKey!;
 
         // Decrypt the item's AES key using the recipient's RSA private key
         const decryptedAesKey = await rsaDecrypt(

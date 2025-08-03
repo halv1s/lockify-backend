@@ -16,29 +16,15 @@ Table Users {
 
 Table Workspaces {
   id string [primary key]
-  owner_id string [ref: > Users.id, not null]
   name string [not null]
   created_at timestamp
   updated_at timestamp
 }
 
-Table WorkspaceMembers {
-  workspace_id string [ref: > Workspaces.id, not null]
-  user_id string [ref: > Users.id, not null]
-  role string [not null, note: '"admin", "manager", "member"']
-  created_at timestamp
-  
-  indexes {
-    (workspace_id, user_id) [unique]
-  }
-}
-
 Table Folders {
   id string [primary key]
   workspace_id string [ref: > Workspaces.id, not null]
-  owner_id string [ref: > Users.id, not null]
   name string [not null]
-  parent_id string [ref: > Folders.id, note: 'For nested folders']
   created_at timestamp
   updated_at timestamp
 }
@@ -46,7 +32,6 @@ Table Folders {
 Table Items {
   id string [primary key]
   folder_id string [ref: > Folders.id, not null]
-  owner_id string [ref: > Users.id, not null]
   type string [not null, note: 'Enum: "Login", "Secure Note", etc.']
   display_metadata json
   encrypted_data string [not null]
@@ -57,20 +42,16 @@ Table Items {
   updated_at timestamp
 }
 
-Table Shares {
+Table Relations {
   id string [primary key]
-  user_id string [ref: > Users.id, not null]
-  
-  target_id string [not null]
-  target_type string [not null, note: 'Enum: "folder", "item"']
-  
-  permissions string [not null, note: '"edit", "read-only"']
-  
-  encrypted_key string [not null]
-  
+  subject string [not null, note: "The subject of the relation. Format: 'users:<user_id>' or a reference to another relation set, e.g., 'workspaces:<workspace_id>#manager'"]
+  relation string [not null, note: "The relation between the subject and object. E.g., 'owner', 'manager', 'editor', 'viewer', 'parent'"]
+  object string [not null, note: "The object of the relation. Format: 'workspaces:<workspace_id>', 'folders:<folder_id>', 'items:<item_id>'"]
+  encrypted_key string [note: "Stores the encrypted item/folder key for explicit shares (e.g., for 'editor' or 'viewer' relations)"]
   created_at timestamp
+  updated_at timestamp
   
   indexes {
-    (user_id, target_id, target_type) [unique]
+    (subject, relation, object) [unique]
   }
 }

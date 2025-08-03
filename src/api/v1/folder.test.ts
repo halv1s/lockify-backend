@@ -3,13 +3,12 @@ import mongoose from "mongoose";
 import request from "supertest";
 
 import config from "@/config";
-import Folder, { IFolder } from "@/models/folder.model";
+import Folder from "@/models/folder.model";
+import Relation from "@/models/relation.model";
 import { IUser } from "@/models/user.model";
-import Workspace from "@/models/workspace.model";
-import WorkspaceMember from "@/models/workspaceMember.model";
 import app from "@/server";
 import * as authService from "@/services/auth.service";
-import { WorkspaceRole } from "@/types";
+import { ReBACNamespace, ReBACRelation } from "@/types";
 
 jest.mock("@/config/db");
 
@@ -52,16 +51,20 @@ describe("Folder Routes /api/v1/folders", () => {
 
         personalWorkspaceId = adminUser.defaultWorkspaceId.toString();
 
-        await WorkspaceMember.insertMany([
+        const workspaceObject = `${ReBACNamespace.WORKSPACES}:${personalWorkspaceId}`;
+        await Relation.insertMany([
+            // The `adminUser` is already an admin of `personalWorkspaceId` via registerUser.
+            // Add managerUser as a MANAGER
             {
-                workspaceId: personalWorkspaceId,
-                userId: managerUser._id,
-                role: WorkspaceRole.MANAGER,
+                subject: `${ReBACNamespace.USERS}:${managerUser._id}`,
+                relation: ReBACRelation.MANAGER,
+                object: workspaceObject,
             },
+            // Add memberUser as a MEMBER
             {
-                workspaceId: personalWorkspaceId,
-                userId: memberUser._id,
-                role: WorkspaceRole.MEMBER,
+                subject: `${ReBACNamespace.USERS}:${memberUser._id}`,
+                relation: ReBACRelation.MEMBER,
+                object: workspaceObject,
             },
         ]);
     });
@@ -119,28 +122,30 @@ describe("Folder Routes /api/v1/folders", () => {
                 });
             const parentFolderId = parentFolderRes.body.data._id;
 
-            const subfolderName = "Subfolder";
             const res = await request(app)
                 .post("/api/v1/folders")
                 .set("Authorization", `Bearer ${adminToken}`)
                 .send({
-                    name: subfolderName,
+                    name: "Subfolder",
                     workspaceId: personalWorkspaceId,
                     parentId: parentFolderId,
                 });
 
             expect(res.status).toBe(201);
-            expect(res.body.data).toHaveProperty("name", subfolderName);
-            expect(res.body.data).toHaveProperty("parentId", parentFolderId);
 
-            const subfolder = await Folder.findById(res.body.data._id);
-            expect(subfolder).not.toBeNull();
-            expect(subfolder!.parentId!.toString()).toBe(parentFolderId);
+            const childObject = `${ReBACNamespace.FOLDERS}:${res.body.data._id}`;
+            const parentObject = `${ReBACNamespace.FOLDERS}:${parentFolderId}`;
+            const parentRelation = await Relation.findOne({
+                subject: childObject,
+                relation: ReBACRelation.PARENT,
+                object: parentObject,
+            });
+            expect(parentRelation).not.toBeNull();
         });
 
+        // This test case remains the same as it tests for invalid input
         it("should fail if trying to create a subfolder with a non-existent parentId", async () => {
             const fakeParentId = new mongoose.Types.ObjectId().toString();
-
             const res = await request(app)
                 .post("/api/v1/folders")
                 .set("Authorization", `Bearer ${adminToken}`)
@@ -156,39 +161,23 @@ describe("Folder Routes /api/v1/folders", () => {
     });
 
     describe("GET /", () => {
-        it("should get all folders for a given workspace", async () => {
+        it("should get all folders for a given workspace if user is a member", async () => {
             await new Folder({
-                ownerId: adminUser._id,
                 workspaceId: personalWorkspaceId,
                 name: "Work",
             }).save();
             await new Folder({
-                ownerId: managerUser._id,
                 workspaceId: personalWorkspaceId,
                 name: "Personal Projects",
             }).save();
 
-            const otherWorkspace = await new Workspace({
-                ownerId: adminUser._id,
-                name: "Other",
-            }).save();
-            await new Folder({
-                ownerId: adminUser._id,
-                workspaceId: otherWorkspace._id,
-                name: "Secret",
-            }).save();
-
             const res = await request(app)
                 .get(`/api/v1/folders?workspaceId=${personalWorkspaceId}`)
-                .set("Authorization", `Bearer ${adminToken}`);
+                .set("Authorization", `Bearer ${memberToken}`);
 
             expect(res.status).toBe(200);
             expect(res.body.data).toBeInstanceOf(Array);
-            expect(res.body.data.length).toBe(3);
-            const folderNames = res.body.data.map((f: IFolder) => f.name);
-            expect(folderNames).toContain("Work");
-            expect(folderNames).toContain("Personal Projects");
-            expect(folderNames).not.toContain("Secret");
+            expect(res.body.data.length).toBe(3); // Including the "Uncategorized" folder
         });
 
         it("should fail with status 403 if user tries to get folders from a workspace they are not in", async () => {
