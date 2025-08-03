@@ -6,6 +6,8 @@ export interface IUser extends Document {
     srpSalt: string;
     srpVerifier: string;
     rsaPublicKey: string;
+    encryptedRsaPrivateKey: string;
+    encryptedRsaPrivateKeyIv: string;
     defaultWorkspaceId: mongoose.Types.ObjectId;
 }
 
@@ -32,6 +34,14 @@ const userSchema: Schema = new Schema(
             required: true,
         },
         rsaPublicKey: {
+            type: String,
+            required: true,
+        },
+        encryptedRsaPrivateKey: {
+            type: String,
+            required: true,
+        },
+        encryptedRsaPrivateKeyIv: {
             type: String,
             required: true,
         },

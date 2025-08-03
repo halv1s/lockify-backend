@@ -70,7 +70,9 @@ router.post("/", protect, async (req: Request, res: Response) => {
         type,
         displayMetadata,
         encryptedData,
+        encryptedDataIv,
         encryptedRecordKey,
+        encryptedRecordKeyIv,
     } = req.body;
 
     if (!folderId || !type || !encryptedData || !encryptedRecordKey) {
@@ -87,7 +89,9 @@ router.post("/", protect, async (req: Request, res: Response) => {
             type: type as ItemType,
             displayMetadata,
             encryptedData,
+            encryptedDataIv,
             encryptedRecordKey,
+            encryptedRecordKeyIv,
         });
         res.status(201).json({ data: newItem });
     } catch (error: unknown) {

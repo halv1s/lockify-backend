@@ -23,6 +23,8 @@ describe("Workspace Routes /api/v1/workspaces", () => {
             srpSalt: "somesalt",
             srpVerifier: "someverifier",
             rsaPublicKey: "somekey",
+            encryptedRsaPrivateKey: "encryptedkey",
+            encryptedRsaPrivateKeyIv: "encryptedkeyiv",
         };
         const createdUser = await authService.registerUser(userInput);
 
@@ -50,6 +52,8 @@ describe("Workspace Routes /api/v1/workspaces", () => {
                 srpSalt: "salt2",
                 srpVerifier: "verifier2",
                 rsaPublicKey: "key2",
+                encryptedRsaPrivateKey: "encryptedkey2",
+                encryptedRsaPrivateKeyIv: "encryptedkeyiv2",
                 defaultWorkspaceId: new mongoose.Types.ObjectId(),
             }).save();
 

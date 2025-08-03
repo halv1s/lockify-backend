@@ -6,7 +6,7 @@ import { SRP, SrpClient } from "fast-srp-hap";
 import request from "supertest";
 
 import Share from "@/models/share.model";
-import User, { IUser } from "@/models/user.model";
+import User from "@/models/user.model";
 import app from "@/server";
 import { FolderPermissions, ItemType, ShareTargetType } from "@/types";
 
@@ -53,11 +53,8 @@ async function deriveMasterKey(
 }
 
 // Helper to encrypt an AES key using another AES key (for Master Key -> Item Key)
-async function aesKeyEncrypt(
-    itemKey: CryptoKey,
-    masterKey: CryptoKey,
-    iv: Uint8Array
-) {
+async function aesKeyEncrypt(itemKey: CryptoKey, masterKey: CryptoKey) {
+    const iv = webcrypto.getRandomValues(new Uint8Array(12));
     const exportedItemKey = await webcrypto.subtle.exportKey("raw", itemKey);
     const encryptedItemKey = await webcrypto.subtle.encrypt(
         {
@@ -67,16 +64,20 @@ async function aesKeyEncrypt(
         masterKey,
         exportedItemKey
     );
-    return Buffer.from(encryptedItemKey).toString("base64");
+    return {
+        ciphertext: Buffer.from(encryptedItemKey).toString("base64"),
+        iv: Buffer.from(iv).toString("base64"),
+    };
 }
 
 // Helper to decrypt an AES key using another AES key
 async function aesKeyDecrypt(
     encryptedBase64: string,
     masterKey: CryptoKey,
-    iv: Uint8Array
+    ivBase64: string
 ) {
     const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
+    const iv = Buffer.from(ivBase64, "base64");
     const decryptedItemKeyRaw = await webcrypto.subtle.decrypt(
         {
             name: "AES-GCM",
@@ -92,6 +93,55 @@ async function aesKeyDecrypt(
         true,
         ["encrypt", "decrypt"]
     );
+}
+
+// Helper to generate AES key (raw bytes)
+async function generateAesKey() {
+    const aesKey = await webcrypto.subtle.generateKey(
+        {
+            name: "AES-GCM",
+            length: 256,
+        },
+        true,
+        ["encrypt", "decrypt"]
+    );
+    return aesKey;
+}
+
+// Helper to encrypt data using AES-GCM
+async function aesEncrypt(data: string, key: CryptoKey) {
+    const iv = webcrypto.getRandomValues(new Uint8Array(12));
+    const encryptedContent = await webcrypto.subtle.encrypt(
+        {
+            name: "AES-GCM",
+            iv: iv,
+        },
+        key,
+        new TextEncoder().encode(data)
+    );
+    return {
+        ciphertext: Buffer.from(encryptedContent).toString("base64"),
+        iv: Buffer.from(iv).toString("base64"),
+    };
+}
+
+// Helper to decrypt data using AES-GCM
+async function aesDecrypt(
+    encryptedBase64: string,
+    key: CryptoKey,
+    ivBase64: string
+) {
+    const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
+    const iv = Buffer.from(ivBase64, "base64");
+    const decryptedContent = await webcrypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv: iv,
+        },
+        key,
+        encryptedArrayBuffer
+    );
+    return new TextDecoder().decode(decryptedContent);
 }
 
 // Helper to generate RSA key pair (JWK format)
@@ -115,50 +165,6 @@ async function generateRsaKeyPair() {
         privateKey
     );
     return { publicKey: exportedPublicKey, privateKey: exportedPrivateKey };
-}
-
-// Helper to generate AES key (raw bytes)
-async function generateAesKey() {
-    const aesKey = await webcrypto.subtle.generateKey(
-        {
-            name: "AES-GCM",
-            length: 256,
-        },
-        true,
-        ["encrypt", "decrypt"]
-    );
-    return aesKey;
-}
-
-// Helper to encrypt data using AES-GCM
-async function aesEncrypt(data: string, key: CryptoKey, iv: Uint8Array) {
-    const encryptedContent = await webcrypto.subtle.encrypt(
-        {
-            name: "AES-GCM",
-            iv: iv,
-        },
-        key,
-        new TextEncoder().encode(data)
-    );
-    return Buffer.from(encryptedContent).toString("base64");
-}
-
-// Helper to decrypt data using AES-GCM
-async function aesDecrypt(
-    encryptedBase64: string,
-    key: CryptoKey,
-    iv: Uint8Array
-) {
-    const encryptedArrayBuffer = Buffer.from(encryptedBase64, "base64");
-    const decryptedContent = await webcrypto.subtle.decrypt(
-        {
-            name: "AES-GCM",
-            iv: iv,
-        },
-        key,
-        encryptedArrayBuffer
-    );
-    return new TextDecoder().decode(decryptedContent);
 }
 
 // Helper to encrypt AES key using RSA-OAEP public key
@@ -207,17 +213,12 @@ async function rsaDecrypt(encryptedBase64: string, rsaPrivateKey: JsonWebKey) {
     );
 }
 
-// Fixed IVs for testing simplicity, in a real app these should be random
-const ivItem = webcrypto.getRandomValues(new Uint8Array(12));
-const ivRecordKey = webcrypto.getRandomValues(new Uint8Array(12));
-
 describe("End-to-End User Flow Tests", () => {
     let testUserEmail: string;
     let testUserPassword: string;
     let userToken: string;
     let personalWorkspaceId: string;
     let createdItemId: string;
-    let registeredUser: IUser | null;
     let userMasterSalt: string;
     let userMasterKey: CryptoKey;
     let rsaKeyPair: { publicKey: JsonWebKey; privateKey: JsonWebKey };
@@ -244,18 +245,30 @@ describe("End-to-End User Flow Tests", () => {
             Buffer.from(testUserPassword)
         );
 
+        userMasterKey = await deriveMasterKey(testUserPassword, userMasterSalt);
+
+        const {
+            ciphertext: encryptedRsaPrivateKey,
+            iv: encryptedRsaPrivateKeyIv,
+        } = await aesEncrypt(
+            JSON.stringify(rsaKeyPair.privateKey),
+            userMasterKey
+        );
+
         const registerRes = await request(app)
             .post("/api/v1/auth/register")
             .send({
                 email: testUserEmail,
+                masterSalt: userMasterSalt,
                 srpSalt: srpSalt.toString("hex"),
                 srpVerifier: srpVerifier.toString("hex"),
                 rsaPublicKey: JSON.stringify(rsaKeyPair.publicKey),
-                masterSalt: userMasterSalt,
+                encryptedRsaPrivateKey,
+                encryptedRsaPrivateKeyIv,
             });
 
         expect(registerRes.status).toBe(201);
-        registeredUser = await User.findOne({ email: testUserEmail });
+        const registeredUser = await User.findOne({ email: testUserEmail });
         personalWorkspaceId = registeredUser!.defaultWorkspaceId.toString();
 
         // --- Step 2: Initiate Login Flow ---
@@ -282,13 +295,7 @@ describe("End-to-End User Flow Tests", () => {
         expect(verifyRes.status).toBe(200);
         userToken = verifyRes.body.token;
 
-        // --- Step 4: Derive Master Key from password and retrieved salt ---
-        userMasterKey = await deriveMasterKey(
-            testUserPassword,
-            registeredUser!.masterSalt
-        );
-
-        // --- Step 5: Create a new Folder in the default Workspace ---
+        // --- Step 4: Create a new Folder in the default Workspace ---
         const newFolderName = "E2E Development Folder";
         const createFolderRes = await request(app)
             .post("/api/v1/folders")
@@ -300,7 +307,7 @@ describe("End-to-End User Flow Tests", () => {
         expect(createFolderRes.status).toBe(201);
         const newFolderId = createFolderRes.body.data._id;
 
-        // --- Step 6: Create a new Item with real client-side encryption logic ---
+        // --- Step 5: Create a new Item with real client-side encryption logic ---
         const itemData = {
             login: "test-login",
             password: "test-password",
@@ -308,18 +315,10 @@ describe("End-to-End User Flow Tests", () => {
         };
         const itemAesKey = await generateAesKey();
 
-        // Encrypt item data with the new item's key
-        const encryptedData = await aesEncrypt(
-            JSON.stringify(itemData),
-            itemAesKey,
-            ivItem
-        );
-        // Encrypt the item's key with the user's master key
-        const encryptedRecordKey = await aesKeyEncrypt(
-            itemAesKey,
-            userMasterKey,
-            ivRecordKey
-        );
+        const { ciphertext: encryptedData, iv: encryptedDataIv } =
+            await aesEncrypt(JSON.stringify(itemData), itemAesKey);
+        const { ciphertext: encryptedRecordKey, iv: encryptedRecordKeyIv } =
+            await aesKeyEncrypt(itemAesKey, userMasterKey);
 
         const createItemRes = await request(app)
             .post("/api/v1/items")
@@ -328,12 +327,14 @@ describe("End-to-End User Flow Tests", () => {
                 folderId: newFolderId,
                 type: ItemType.LOGIN,
                 displayMetadata: { title: "E2E Test Login Credential" },
-                encryptedData: encryptedData,
-                encryptedRecordKey: encryptedRecordKey,
+                encryptedData,
+                encryptedDataIv,
+                encryptedRecordKey,
+                encryptedRecordKeyIv,
             });
         createdItemId = createItemRes.body.data._id;
 
-        // --- Step 7: Retrieve the created Item and verify its contents (via decryption) ---
+        // --- Step 6: Retrieve the created Item and verify its contents (via decryption) ---
         const getItemRes = await request(app)
             .get(`/api/v1/items/${createdItemId}`)
             .set("Authorization", `Bearer ${userToken}`);
@@ -341,16 +342,15 @@ describe("End-to-End User Flow Tests", () => {
         expect(getItemRes.status).toBe(200);
         const retrievedItem = getItemRes.body.data;
 
-        // Simulate client-side decryption using the Master Key
         const decryptedItemKey = await aesKeyDecrypt(
             retrievedItem.encryptedRecordKey,
             userMasterKey,
-            ivRecordKey
+            retrievedItem.encryptedRecordKeyIv
         );
         const decryptedItemDataJson = await aesDecrypt(
             retrievedItem.encryptedData,
             decryptedItemKey,
-            ivItem
+            retrievedItem.encryptedDataIv
         );
         const decryptedItemData = JSON.parse(decryptedItemDataJson);
 
@@ -374,7 +374,6 @@ describe("End-to-End Sharing Flow with RSA", () => {
     let itemAesKey: CryptoKey | null;
     let initiatorMasterKey: CryptoKey;
     let initiatorMasterSalt: string;
-    const fixedIv = webcrypto.getRandomValues(new Uint8Array(12));
 
     beforeEach(async () => {
         initiatorEmail = `initiator-${Date.now()}@e2e.com`;
@@ -407,22 +406,31 @@ describe("End-to-End Sharing Flow with RSA", () => {
             Buffer.from(initiatorEmail),
             Buffer.from(initiatorPassword)
         );
-        await request(app)
-            .post("/api/v1/auth/register")
-            .send({
-                email: initiatorEmail,
-                srpSalt: initiatorSrpSalt.toString("hex"),
-                srpVerifier: initiatorSrpVerifier.toString("hex"),
-                rsaPublicKey: JSON.stringify(initiatorRsaKeyPair.publicKey),
-                masterSalt: initiatorMasterSalt,
-            });
-        const initiatorUser = await User.findOne({ email: initiatorEmail });
-        const initiatorDefaultWorkspaceId =
-            initiatorUser!.defaultWorkspaceId.toString();
         initiatorMasterKey = await deriveMasterKey(
             initiatorPassword,
             initiatorMasterSalt
         );
+        const {
+            ciphertext: encryptedRsaPrivateKey,
+            iv: encryptedRsaPrivateKeyIv,
+        } = await aesEncrypt(
+            JSON.stringify(initiatorRsaKeyPair.privateKey),
+            initiatorMasterKey
+        );
+        await request(app)
+            .post("/api/v1/auth/register")
+            .send({
+                email: initiatorEmail,
+                masterSalt: initiatorMasterSalt,
+                srpSalt: initiatorSrpSalt.toString("hex"),
+                srpVerifier: initiatorSrpVerifier.toString("hex"),
+                rsaPublicKey: JSON.stringify(initiatorRsaKeyPair.publicKey),
+                encryptedRsaPrivateKey,
+                encryptedRsaPrivateKeyIv,
+            });
+        const initiatorUser = await User.findOne({ email: initiatorEmail });
+        const initiatorDefaultWorkspaceId =
+            initiatorUser!.defaultWorkspaceId.toString();
 
         // --- Step 2: Register Recipient User (User B) ---
         const recipientSrpSalt = await SRP.genKey(32);
@@ -435,14 +443,27 @@ describe("End-to-End Sharing Flow with RSA", () => {
         const recipientMasterSalt = webcrypto
             .getRandomValues(new Uint8Array(16))
             .toString();
+        const recipientMasterKey = await deriveMasterKey(
+            recipientPassword,
+            recipientMasterSalt
+        );
+        const {
+            ciphertext: encryptedRecipientRsaPrivateKey,
+            iv: encryptedRecipientRsaPrivateKeyIv,
+        } = await aesEncrypt(
+            JSON.stringify(recipientRsaKeyPair.privateKey),
+            recipientMasterKey
+        );
         await request(app)
             .post("/api/v1/auth/register")
             .send({
                 email: recipientEmail,
+                masterSalt: recipientMasterSalt,
                 srpSalt: recipientSrpSalt.toString("hex"),
                 srpVerifier: recipientSrpVerifier.toString("hex"),
                 rsaPublicKey: JSON.stringify(recipientRsaKeyPair.publicKey),
-                masterSalt: recipientMasterSalt,
+                encryptedRsaPrivateKey: encryptedRecipientRsaPrivateKey,
+                encryptedRsaPrivateKeyIv: encryptedRecipientRsaPrivateKeyIv,
             });
         const recipientUser = await User.findOne({ email: recipientEmail });
 
@@ -479,17 +500,10 @@ describe("End-to-End Sharing Flow with RSA", () => {
 
         // --- Step 5: Initiator (User A) Creates an Item with real client-side encryption ---
         itemAesKey = await generateAesKey();
-        const encryptedData = await aesEncrypt(
-            JSON.stringify(originalItemData),
-            itemAesKey,
-            fixedIv
-        );
-        // Correctly create encryptedRecordKey using the initiator's Master Key
-        const encryptedRecordKey = await aesKeyEncrypt(
-            itemAesKey,
-            initiatorMasterKey,
-            fixedIv
-        );
+        const { ciphertext: encryptedData, iv: encryptedDataIv } =
+            await aesEncrypt(JSON.stringify(originalItemData), itemAesKey);
+        const { ciphertext: encryptedRecordKey, iv: encryptedRecordKeyIv } =
+            await aesKeyEncrypt(itemAesKey, initiatorMasterKey);
 
         const createItemRes = await request(app)
             .post("/api/v1/items")
@@ -498,8 +512,10 @@ describe("End-to-End Sharing Flow with RSA", () => {
                 folderId: initiatorFolderId,
                 type: ItemType.LOGIN,
                 displayMetadata: { title: "Shared Login Item" },
-                encryptedData: encryptedData,
-                encryptedRecordKey: encryptedRecordKey,
+                encryptedData,
+                encryptedDataIv,
+                encryptedRecordKey,
+                encryptedRecordKeyIv,
             });
         sharedItemId = createItemRes.body.data._id;
 
@@ -567,12 +583,10 @@ describe("End-to-End Sharing Flow with RSA", () => {
             recipientRsaKeyPair.privateKey
         );
 
-        // Decrypt the item's data using the decrypted AES key.
-        // Note: In a real app, the IV would be stored/retrieved along with the encrypted data.
         const decryptedItemDataJson = await aesDecrypt(
             retrievedItem.encryptedData,
             decryptedAesKey,
-            fixedIv
+            retrievedItem.encryptedDataIv
         );
         const decryptedItemData = JSON.parse(decryptedItemDataJson);
 

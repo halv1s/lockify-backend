@@ -8,7 +8,9 @@ export interface IItem extends Document {
     type: ItemType;
     displayMetadata?: object;
     encryptedData: string;
+    encryptedDataIv: string;
     encryptedRecordKey: string;
+    encryptedRecordKeyIv: string;
 }
 
 const itemSchema: Schema = new Schema(
@@ -38,8 +40,16 @@ const itemSchema: Schema = new Schema(
             type: String,
             required: true,
         },
+        encryptedDataIv: {
+            type: String,
+            required: true,
+        },
         // The key for this specific item
         encryptedRecordKey: {
+            type: String,
+            required: true,
+        },
+        encryptedRecordKeyIv: {
             type: String,
             required: true,
         },

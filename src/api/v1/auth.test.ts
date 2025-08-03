@@ -16,6 +16,8 @@ describe("Auth Routes /api/v1/auth", () => {
             srpSalt: "somesalt",
             srpVerifier: "someverifier",
             rsaPublicKey: "somekey",
+            encryptedRsaPrivateKey: "someencryptedkey",
+            encryptedRsaPrivateKeyIv: "some-encrypted-rsa-key-iv",
         };
 
         it("should register a new user and create a default workspace and folder", async () => {
@@ -96,6 +98,8 @@ describe("Auth Routes /api/v1/auth", () => {
                     srpSalt: salt.toString("hex"),
                     srpVerifier: verifier.toString("hex"),
                     rsaPublicKey: "some-rsa-key",
+                    encryptedRsaPrivateKey: "some-encrypted-rsa-key",
+                    encryptedRsaPrivateKeyIv: "some-encrypted-rsa-key-iv",
                 });
         });
 

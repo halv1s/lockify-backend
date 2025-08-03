@@ -27,6 +27,8 @@ describe("Share Routes /api/v1/shares", () => {
             srpSalt: "salt",
             srpVerifier: "verifier",
             rsaPublicKey: "key",
+            encryptedRsaPrivateKey: "encryptedkey",
+            encryptedRsaPrivateKeyIv: "encryptedkeyiv",
         });
         const token = jwt.sign(
             { userId: user._id, email: user.email },

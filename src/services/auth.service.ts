@@ -18,6 +18,8 @@ interface IRegisterInput {
     srpSalt: string;
     srpVerifier: string;
     rsaPublicKey: string;
+    encryptedRsaPrivateKey: string;
+    encryptedRsaPrivateKeyIv: string;
 }
 
 export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
@@ -38,6 +40,8 @@ export const registerUser = async (input: IRegisterInput): Promise<IUser> => {
             srpSalt: input.srpSalt,
             srpVerifier: input.srpVerifier,
             rsaPublicKey: input.rsaPublicKey,
+            encryptedRsaPrivateKey: input.encryptedRsaPrivateKey,
+            encryptedRsaPrivateKeyIv: input.encryptedRsaPrivateKeyIv,
             // We set a temporary value for defaultWorkspaceId that will be updated.
             defaultWorkspaceId: new mongoose.Types.ObjectId(),
         });

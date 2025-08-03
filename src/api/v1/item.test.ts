@@ -32,6 +32,8 @@ describe("Item Routes /api/v1/items", () => {
             srpSalt: "s",
             srpVerifier: "v",
             rsaPublicKey: "k",
+            encryptedRsaPrivateKey: "encryptedkey",
+            encryptedRsaPrivateKeyIv: "encryptedkeyiv",
         });
         const token = jwt.sign(
             { userId: user._id, email: user.email },
@@ -66,7 +68,9 @@ describe("Item Routes /api/v1/items", () => {
             type: ItemType.LOGIN,
             displayMetadata: { title: "Shared API Key" },
             encryptedData: "super-secret-data",
+            encryptedDataIv: "super-secret-data-iv",
             encryptedRecordKey: "super-secret-key",
+            encryptedRecordKeyIv: "super-secret-key-iv",
         }).save();
         sharedItem = item.toObject();
 
@@ -137,7 +141,9 @@ describe("Item Routes /api/v1/items", () => {
                     ).toString(),
                     type: ItemType.API_KEY,
                     encryptedData: "some-api-data",
+                    encryptedDataIv: "some-api-data-iv",
                     encryptedRecordKey: "some-api-key",
+                    encryptedRecordKeyIv: "some-api-key-iv",
                 });
 
             expect(res.status).toBe(201);
@@ -171,7 +177,9 @@ describe("Item Routes /api/v1/items", () => {
                     ).toString(),
                     type: ItemType.LOGIN,
                     encryptedData: "some-data",
+                    encryptedDataIv: "some-data-iv",
                     encryptedRecordKey: "some-key",
+                    encryptedRecordKeyIv: "some-key-iv",
                 });
 
             expect(res.status).toBe(403);
@@ -186,17 +194,23 @@ describe("Item Routes /api/v1/items", () => {
             const res = await request(app)
                 .put(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${ownerToken}`)
-                .send({ encryptedData: "new-data" });
+                .send({
+                    encryptedData: "new-data",
+                    encryptedDataIv: "new-data-iv",
+                });
 
             expect(res.status).toBe(200);
             expect(res.body.data.encryptedData).toBe("new-data");
+            expect(res.body.data.encryptedDataIv).toBe("new-data-iv");
         });
 
         it("should allow a user with 'edit' permission to update the item", async () => {
             const res = await request(app)
                 .put(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${editorToken}`)
-                .send({ displayMetadata: { title: "Updated Title" } });
+                .send({
+                    displayMetadata: { title: "Updated Title" },
+                });
 
             expect(res.status).toBe(200);
             expect(res.body.data.displayMetadata.title).toBe("Updated Title");
@@ -206,7 +220,10 @@ describe("Item Routes /api/v1/items", () => {
             const res = await request(app)
                 .put(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${viewerToken}`)
-                .send({ encryptedData: "forbidden-data" });
+                .send({
+                    encryptedData: "forbidden-data",
+                    encryptedDataIv: "forbidden-data-iv",
+                });
 
             expect(res.status).toBe(403);
         });

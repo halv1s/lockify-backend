@@ -58,7 +58,9 @@ interface ICreateItemInput {
     type: ItemType;
     displayMetadata?: object;
     encryptedData: string;
+    encryptedDataIv: string;
     encryptedRecordKey: string;
+    encryptedRecordKeyIv: string;
 }
 
 export const createItem = async (input: ICreateItemInput): Promise<IItem> => {
@@ -68,7 +70,9 @@ export const createItem = async (input: ICreateItemInput): Promise<IItem> => {
         type,
         displayMetadata,
         encryptedData,
+        encryptedDataIv,
         encryptedRecordKey,
+        encryptedRecordKeyIv,
     } = input;
 
     const hasEditPermission = await permissionService.hasPermission(
@@ -90,7 +94,9 @@ export const createItem = async (input: ICreateItemInput): Promise<IItem> => {
         type,
         displayMetadata,
         encryptedData,
+        encryptedDataIv,
         encryptedRecordKey,
+        encryptedRecordKeyIv,
     });
 
     await newItem.save();
@@ -100,6 +106,7 @@ export const createItem = async (input: ICreateItemInput): Promise<IItem> => {
 interface IUpdateItemInput {
     displayMetadata?: object;
     encryptedData?: string;
+    encryptedDataIv?: string;
 }
 
 export const updateItem = async (
