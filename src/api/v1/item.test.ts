@@ -242,10 +242,22 @@ describe("Item Routes /api/v1/items", () => {
             expect(item).toBeNull();
         });
 
-        it("should FORBID a user with 'edit' permission from deleting the item", async () => {
+        it("should ALLOW a user with 'edit' permission to delete the item", async () => {
             const res = await request(app)
                 .delete(`/api/v1/items/${sharedItem._id}`)
                 .set("Authorization", `Bearer ${editorToken}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body.message).toBe("Item deleted successfully");
+
+            const item = await Item.findById(sharedItem._id);
+            expect(item).toBeNull();
+        });
+
+        it("should FORBID a user with 'read-only' permission from deleting the item", async () => {
+            const res = await request(app)
+                .delete(`/api/v1/items/${sharedItem._id}`)
+                .set("Authorization", `Bearer ${viewerToken}`);
 
             expect(res.status).toBe(403);
         });

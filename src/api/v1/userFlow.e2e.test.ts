@@ -1,7 +1,6 @@
 import { webcrypto } from "crypto";
-import { scrypt } from "crypto";
-import { promisify } from "util";
 
+import { hashRaw } from "@node-rs/argon2";
 import { SRP, SrpClient } from "fast-srp-hap";
 import request from "supertest";
 
@@ -36,16 +35,22 @@ const simulateSrpClientLogin = async (
     };
 };
 
-// Helper to derive Master Key from password and salt using scrypt (as a strong KDF)
-const scryptAsync = promisify(scrypt);
+// Helper to derive Master Key from password and salt using argon2id
 async function deriveMasterKey(
     password: string,
-    salt: string
+    salt: Buffer
 ): Promise<CryptoKey> {
-    const keyBytes = await scryptAsync(password, Buffer.from(salt, "hex"), 32);
+    const keyBytes = await hashRaw(password, {
+        salt,
+        memoryCost: 19456, // 19 MiB
+        timeCost: 2,
+        parallelism: 1,
+        outputLen: 32,
+    });
+
     return webcrypto.subtle.importKey(
         "raw",
-        keyBytes as ArrayBuffer,
+        keyBytes,
         { name: "AES-GCM" },
         false, // not extractable
         ["encrypt", "decrypt"]
@@ -219,7 +224,7 @@ describe("End-to-End User Flow Tests", () => {
     let userToken: string;
     let personalWorkspaceId: string;
     let createdItemId: string;
-    let userMasterSalt: string;
+    let userMasterSalt: Buffer;
     let userMasterKey: CryptoKey;
     let rsaKeyPair: { publicKey: JsonWebKey; privateKey: JsonWebKey };
 
@@ -229,9 +234,9 @@ describe("End-to-End User Flow Tests", () => {
         userToken = "";
         personalWorkspaceId = "";
         createdItemId = "";
-        userMasterSalt = webcrypto
-            .getRandomValues(new Uint8Array(16))
-            .toString();
+        userMasterSalt = Buffer.from(
+            webcrypto.getRandomValues(new Uint8Array(16))
+        );
         rsaKeyPair = await generateRsaKeyPair();
     });
 
@@ -259,7 +264,7 @@ describe("End-to-End User Flow Tests", () => {
             .post("/api/v1/auth/register")
             .send({
                 email: testUserEmail,
-                masterSalt: userMasterSalt,
+                masterSalt: userMasterSalt.toString("hex"),
                 srpSalt: srpSalt.toString("hex"),
                 srpVerifier: srpVerifier.toString("hex"),
                 rsaPublicKey: JSON.stringify(rsaKeyPair.publicKey),
@@ -373,7 +378,7 @@ describe("End-to-End Sharing Flow with RSA", () => {
     let originalItemData: { username: string; password: string };
     let itemAesKey: CryptoKey | null;
     let initiatorMasterKey: CryptoKey;
-    let initiatorMasterSalt: string;
+    let initiatorMasterSalt: Buffer;
 
     beforeEach(async () => {
         initiatorEmail = `initiator-${Date.now()}@e2e.com`;
@@ -392,9 +397,9 @@ describe("End-to-End Sharing Flow with RSA", () => {
 
         initiatorRsaKeyPair = await generateRsaKeyPair();
         recipientRsaKeyPair = await generateRsaKeyPair();
-        initiatorMasterSalt = webcrypto
-            .getRandomValues(new Uint8Array(16))
-            .toString();
+        initiatorMasterSalt = Buffer.from(
+            webcrypto.getRandomValues(new Uint8Array(16))
+        );
     });
 
     it("should allow an initiator to securely share an item with a recipient via RSA, and recipient can decrypt it", async () => {
@@ -421,7 +426,7 @@ describe("End-to-End Sharing Flow with RSA", () => {
             .post("/api/v1/auth/register")
             .send({
                 email: initiatorEmail,
-                masterSalt: initiatorMasterSalt,
+                masterSalt: initiatorMasterSalt.toString("hex"),
                 srpSalt: initiatorSrpSalt.toString("hex"),
                 srpVerifier: initiatorSrpVerifier.toString("hex"),
                 rsaPublicKey: JSON.stringify(initiatorRsaKeyPair.publicKey),
@@ -440,9 +445,9 @@ describe("End-to-End Sharing Flow with RSA", () => {
             Buffer.from(recipientEmail),
             Buffer.from(recipientPassword)
         );
-        const recipientMasterSalt = webcrypto
-            .getRandomValues(new Uint8Array(16))
-            .toString();
+        const recipientMasterSalt = Buffer.from(
+            webcrypto.getRandomValues(new Uint8Array(16))
+        );
         const recipientMasterKey = await deriveMasterKey(
             recipientPassword,
             recipientMasterSalt
@@ -458,7 +463,7 @@ describe("End-to-End Sharing Flow with RSA", () => {
             .post("/api/v1/auth/register")
             .send({
                 email: recipientEmail,
-                masterSalt: recipientMasterSalt,
+                masterSalt: recipientMasterSalt.toString("hex"),
                 srpSalt: recipientSrpSalt.toString("hex"),
                 srpVerifier: recipientSrpVerifier.toString("hex"),
                 rsaPublicKey: JSON.stringify(recipientRsaKeyPair.publicKey),

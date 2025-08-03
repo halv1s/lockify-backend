@@ -26,7 +26,7 @@ export const getItemsInFolder = async (userId: string, folderId: string) => {
     // Fetch only the necessary metadata for the list view (lazy loading).
     // We explicitly exclude the sensitive encrypted fields.
     const items = await Item.find({ folderId }).select(
-        "-encryptedData -encryptedRecordKey"
+        "-encryptedData -encryptedDataIv -encryptedRecordKey -encryptedRecordKeyIv"
     );
 
     return items;
@@ -138,8 +138,18 @@ export const deleteItem = async (
 ): Promise<{ message: string }> => {
     const item = await Item.findById(itemId);
     if (!item) throw new Error("Item not found.");
-    if (item.ownerId.toString() !== userId) {
-        throw new Error("Forbidden: Only the owner can delete this item.");
+
+    const hasEditAccess = await permissionService.hasPermission(
+        userId,
+        itemId,
+        ShareTargetType.ITEM,
+        FolderPermissions.EDIT
+    );
+
+    if (!hasEditAccess) {
+        throw new Error(
+            "Forbidden: You do not have permission to delete this item."
+        );
     }
 
     await Item.deleteOne({ _id: itemId });
