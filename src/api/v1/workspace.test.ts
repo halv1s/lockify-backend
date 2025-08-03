@@ -90,6 +90,26 @@ describe("Workspace Routes /api/v1/workspaces", () => {
     });
 
     describe("POST /", () => {
+        it("should fail with status 400 if the workspace name is missing", async () => {
+            const res = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toBe("Workspace name is required");
+        });
+
+        it("should fail with status 400 if the workspace name is an empty string", async () => {
+            const res = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${userToken}`)
+                .send({ name: "" });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toBe("Workspace name cannot be empty");
+        });
+
         it("should create a new workspace successfully and add the creator as an admin member", async () => {
             const workspaceName = "My New Team";
 

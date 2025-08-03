@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 
 import { protect } from "@/middlewares/auth.middleware";
-import * as workspaceService from "@/services/workspace.service"; // highlight-line
+import { validateRequest } from "@/middlewares/validation.middleware";
+import * as workspaceService from "@/services/workspace.service";
 
 const router = Router();
 
@@ -22,28 +24,38 @@ router.get("/", protect, async (req: Request, res: Response) => {
     }
 });
 
-router.post("/", protect, async (req: Request, res: Response) => {
-    if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const { name } = req.body;
-
-    if (!name) {
-        return res.status(400).json({ message: "Workspace name is required" });
-    }
-
-    try {
-        const newWorkspace = await workspaceService.createWorkspace(
-            req.user.userId,
-            name
-        );
-        res.status(201).json({ data: newWorkspace });
-    } catch (error: unknown) {
-        const errorMessage =
-            error instanceof Error ? error.message : "Unknown error";
-        res.status(500).json({ message: "Server error", error: errorMessage });
-    }
+const createWorkspaceSchema = z.object({
+    body: z.object({
+        name: z
+            .string({ error: "Workspace name is required" })
+            .min(1, "Workspace name cannot be empty"),
+    }),
 });
+
+router.post(
+    "/",
+    protect,
+    validateRequest(createWorkspaceSchema),
+    async (req: Request, res: Response) => {
+        if (!req.user) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        try {
+            const newWorkspace = await workspaceService.createWorkspace(
+                req.user.userId,
+                req.body.name
+            );
+            res.status(201).json({ data: newWorkspace });
+        } catch (error: unknown) {
+            const errorMessage =
+                error instanceof Error ? error.message : "Unknown error";
+            res.status(500).json({
+                message: "Server error",
+                error: errorMessage,
+            });
+        }
+    }
+);
 
 export default router;
