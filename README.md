@@ -1,6 +1,6 @@
 # Lockify Backend — Your Passwords, Your Control
 
-Backend API for Lockify (`https://www.lockify.org`). A minimal, privacy-first service providing authentication, encrypted item storage, sharing, and a relation-based access control model.
+Backend API for [Lockify](https://www.lockify.org). A minimal, privacy-first service providing authentication, encrypted item storage, sharing, and a relation-based access control model.
 
 ## What this backend provides
 
